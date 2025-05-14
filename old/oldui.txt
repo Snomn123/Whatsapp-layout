@@ -1,0 +1,319 @@
+<script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const body = document.body;
+    const container = document.querySelector('.container');
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarHeader = document.querySelector('.sidebar header');
+    const searchContainer = document.querySelector('.search-container');
+    const chatList = document.querySelector('.chat-list');
+    const chatItems = document.querySelectorAll('.chat-item');
+    const chatArea = document.querySelector('.chat-area');
+    const chatHeader = document.querySelector('.chat-header');
+    const chatFooter = document.querySelector('.chat-footer');
+    const messageArea = document.querySelector('.message-area');
+    const messagesReceived = document.querySelectorAll('.message.received');
+    const messagesSent = document.querySelectorAll('.message.sent');
+    const searchInput = document.querySelector('.search-container input');
+    const chatFooterInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const userProfileSpan = document.querySelector('.user-profile span');
+    const contactNames = document.querySelectorAll('.contact-name');
+    const lastMessages = document.querySelectorAll('.last-message');
+    const timeStamps = document.querySelectorAll('.time');
+    const statusTexts = document.querySelectorAll('.chat-details .status');
+    const messageTimes = document.querySelectorAll('.message-time');
+    const forwardIcons = document.querySelectorAll('.forward-icon');
+    const emojiGifButton = document.getElementById('emoji-gif-button');
+    const emojiPanel = document.getElementById('emoji-panel');
+    const gifSearchInput = emojiPanel.querySelector('.gif-search input');
+    const gifSearchButton = emojiPanel.querySelector('.gif-search button');
+    const gifResultsContainer = emojiPanel.querySelector('.gif-results');
+    const fileInput = document.getElementById('file-input');
+    const attachButton = document.getElementById('attach-button');
+
+    const user = document.querySelector('.user-profile span').textContent;
+    let activeChat = 'Contact Name 1';
+    let isEmojiPanelVisible = false;
+
+    const ws = new WebSocket('ws://localhost:3000');
+    ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.receiver === user && message.sender === activeChat) {
+            addMessageToUI(message);
+        }
+    };
+
+    function updateChatHeader(contactName, status) {
+        const chatHeaderName = chatHeader.querySelector('.chat-details .contact-name');
+        const chatHeaderStatus = chatHeader.querySelector('.chat-details .status');
+        chatHeaderName.textContent = contactName;
+        chatHeaderStatus.textContent = status;
+
+         // Clear previous status indicator
+        const existingStatusIndicator = chatHeaderName.querySelector('.online-status, .offline-status');
+        if (existingStatusIndicator) {
+            existingStatusIndicator.remove();
+        }
+
+        // Add new status indicator
+        let statusIndicator;
+        if (status === 'online') {
+            statusIndicator = document.createElement('span');
+            statusIndicator.className = 'online-status';
+            chatHeaderName.insertBefore(statusIndicator, chatHeaderName.firstChild);
+        } else {
+            statusIndicator = document.createElement('span');
+            statusIndicator.className = 'offline-status';
+            chatHeaderName.insertBefore(statusIndicator, chatHeaderName.firstChild);
+        }
+    }
+
+    // Modified chat item click handler
+    chatItems.forEach(item => {
+        item.addEventListener('click', () => {
+            chatItems.forEach(c => c.classList.remove('active'));
+            item.classList.add('active');
+            activeChat = item.dataset.contactName;
+            updateChatHeader(activeChat, item.dataset.status);
+            loadMessages(activeChat);
+        });
+    });
+
+    themeToggle.addEventListener('click', () => {
+        body.classList.toggle('dark-mode');
+        container.classList.toggle('dark-mode');
+        sidebar.classList.toggle('dark-mode');
+        sidebarHeader.classList.toggle('dark-mode');
+        searchContainer.classList.toggle('dark-mode');
+        chatList.classList.toggle('dark-mode');
+        chatArea.classList.toggle('dark-mode');
+        chatHeader.classList.toggle('dark-mode');
+        chatFooter.classList.toggle('dark-mode');
+        messageArea.classList.toggle('dark-mode');
+        searchInput.classList.toggle('dark-mode-input');
+        chatFooterInput.classList.toggle('dark-mode-input');
+        userProfileSpan.classList.toggle('dark-mode-text');
+
+        contactNames.forEach(name => {
+            name.classList.toggle('dark-mode-text');
+        });
+
+        lastMessages.forEach(msg => {
+            msg.classList.toggle('dark-mode-text-secondary');
+        });
+
+        timeStamps.forEach(time => {
+            time.classList.toggle('dark-mode-text-secondary');
+        });
+
+        statusTexts.forEach(status => {
+            status.classList.toggle('dark-mode-text-secondary');
+        });
+
+        messagesReceived.forEach(msg => {
+            msg.classList.toggle('dark-mode-received');
+        });
+
+        messagesSent.forEach(msg => {
+            msg.classList.toggle('dark-mode-sent');
+        });
+
+        chatItems.forEach(item => {
+            item.classList.toggle('dark-mode-chat-item');
+        });
+
+        messageTimes.forEach(time => {
+            time.classList.toggle('dark-mode-text-secondary');
+        });
+        forwardIcons.forEach(forwardIcon => {
+            forwardIcon.classList.toggle('dark-mode');
+        });
+
+        if (body.classList.contains('dark-mode')) {
+            themeToggle.innerHTML = '<img src="light-mode-icon.png" alt="Light Mode">';
+        } else {
+            themeToggle.innerHTML = '<img src="dark-mode-icon.png" alt="Dark Mode">';
+        }
+    });
+
+    sendButton.addEventListener('click', () => {
+        const messageText = chatFooterInput.value.trim();
+        if (messageText !== '') {
+            const newMessage = document.createElement('div');
+            newMessage.classList.add('message', 'sent');
+            newMessage.innerHTML = `<p>${messageText}</p><span class="message-time">${getCurrentTime()}</span>
+                                    <i class="fas fa-share forward-icon"></i>`;
+            messageArea.appendChild(newMessage);
+            chatFooterInput.value = '';
+            messageArea.scrollTop = messageArea.scrollHeight;
+        }
+    });
+
+    // Modified send functionality
+    sendButton.addEventListener('click', sendMessage);
+    chatFooterInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    function getCurrentTime() {
+        const now = new Date();
+        let hours = now.getHours();
+        const minutes = now.getMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        return `${hours}:${minutes < 10 ? '0' + minutes : minutes} ${ampm}`;
+    }
+
+    emojiGifButton.addEventListener('click', (event) => {
+        event.stopPropagation(); // Prevent click from propagating to document
+        isEmojiPanelVisible = !isEmojiPanelVisible;
+        emojiPanel.classList.toggle('show', isEmojiPanelVisible);
+    });
+
+    document.addEventListener('click', () => {
+        isEmojiPanelVisible = false;
+        emojiPanel.classList.remove('show');
+    });
+
+    emojiPanel.addEventListener('click', (event) => {
+        event.stopPropagation();
+    });
+
+    const emojiList = emojiPanel.querySelector('.emoji-list');
+    emojiList.addEventListener('click', (event) => {
+        if (event.target.tagName === 'SPAN') {
+            const emoji = event.target.textContent;
+            chatFooterInput.value += emoji;
+            chatFooterInput.focus();
+        }
+    });
+
+    gifSearchButton.addEventListener('click', () => {
+        const searchTerm = gifSearchInput.value.trim();
+        if (searchTerm) {
+            // In a real application, you would use an API like Giphy.
+            // For this example, we'll just display some placeholder GIFs.
+            const placeholderGIFs = [
+                'https://via.placeholder.com/100x100?text=GIF1',
+                'https://via.placeholder.com/100x100?text=GIF2',
+                'https://via.placeholder.com/100x100?text=GIF3',
+                'https://via.placeholder.com/100x100?text=GIF4',
+                'https://via.placeholder.com/100x100?text=GIF5',
+                'https://via.placeholder.com/100x100?text=GIF6',
+            ];
+            gifResultsContainer.innerHTML = '';
+            placeholderGIFs.forEach(gifUrl => {
+                const img = document.createElement('img');
+                img.src = gifUrl;
+                img.alt = 'GIF';
+                img.addEventListener('click', () => {
+                    chatFooterInput.value += `[GIF: ${gifUrl}]`;
+                    chatFooterInput.focus();
+                    isEmojiPanelVisible = false;
+                    emojiPanel.classList.remove('show');
+                });
+                gifResultsContainer.appendChild(img);
+            });
+        }
+    });
+
+    attachButton.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', async () => {
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const fileInfo = await response.json();
+        sendMessage(fileInfo.url); // Send as special message
+    });
+
+    messageArea.addEventListener('scroll', async () => {
+        if (messageArea.scrollTop === 0) {
+            const firstMessage = document.querySelector('.message');
+            const response = await fetch(`/messages/history?user=${user}&contact=${activeChat}&before=${firstMessage.dataset.timestamp}`);
+            const messages = await response.json();
+            messages.reverse().forEach(msg => addMessageToUI(msg, false, true));
+        }
+    });
+
+    async function sendMessage() {
+        const messageText = chatFooterInput.value.trim();
+        if (!messageText) return;
+
+        try {
+            const response = await fetch('/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sender: user,
+                    receiver: activeChat,
+                    message: messageText
+                })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                addMessageToUI(data.message, true);
+                chatFooterInput.value = '';
+                messageArea.scrollTop = messageArea.scrollHeight;
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+        }
+    }
+
+    // Message loading function
+    async function loadMessages(contact) {
+        try {
+            const response = await fetch(`/messages?user=${encodeURIComponent(user)}&contact=${encodeURIComponent(contact)}`);
+            const messages = await response.json();
+            messageArea.innerHTML = '';
+            messages.forEach(msg => addMessageToUI(msg));
+            // Add this line to scroll to bottom after loading
+            messageArea.scrollTop = messageArea.scrollHeight;
+        } catch (error) {
+            console.error('Error loading messages:', error);
+        }
+    }
+
+    function addMessageToUI(msg, isNew = false) {
+        const isSent = msg.sender === user;
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message', isSent ? 'sent' : 'received');
+        
+        const timestamp = new Date(msg.timestamp).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+        
+        messageDiv.innerHTML = `
+            <p>${msg.message}</p>
+            <span class="message-time">${timestamp}</span>
+            <i class="fas fa-share forward-icon"></i>
+        `;
+        
+        // Modified this part to always append messages
+        messageArea.appendChild(messageDiv);
+        
+        // Scroll to bottom only for new messages or initial load
+        if (isNew) {
+            messageArea.scrollTop = messageArea.scrollHeight;
+        }
+    }
+
+    
+    // Initial load
+    loadMessages(activeChat);
+</script>

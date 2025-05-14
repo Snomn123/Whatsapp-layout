@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp-like Web UI</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="auth-container" style="display: none;">
+        <div class="auth-form">
+            <h2>Welcome to WhatsApp Clone</h2>
+            <form id="login-form">
+                <input type="text" placeholder="Username" id="username" required>
+                <input type="password" placeholder="Password" id="password" required>
+                <button type="submit">Login</button>
+            </form>
+            <p class="auth-error"></p>
+        </div>
+    </div>
+    <div class="container">
+        <aside class="sidebar">
+            <header>
+                <div class="user-profile">
+                    <img src="user-avatar.png" alt="User Avatar">
+                    <span>Your Name</span>
+                </div>
+                <div class="sidebar-icons">
+                    <button id="theme-toggle"><img src="dark-mode-icon.png" alt="Dark Mode"></button>
+                    <a href="#"><img src="new-chat-icon.png" alt="New Chat"></a>
+                </div>
+            </header>
+            <div class="search-container">
+                <input type="text" placeholder="Search or start new chat">
+            </div>
+            <ul class="chat-list">
+                <li class="chat-item active" 
+                    data-contact-id="1" 
+                    data-contact-name="Contact Name 1" 
+                    data-status="online">
+                    <img src="contact1-avatar.png" alt="Contact 1 Avatar">
+                    <div class="chat-info">
+                        <span class="contact-name">
+                            <span class="online-status"></span>
+                            Contact Name 1
+                        </span>
+                        <p class="last-message">Last message received...</p>
+                    </div>
+                    <span class="time">10:30 AM</span>
+                </li>
+                <li class="chat-item" 
+                    data-contact-id="2" 
+                    data-contact-name="Contact Name 2" 
+                    data-status="offline">
+                    <img src="contact2-avatar.png" alt="Contact 2 Avatar">
+                    <div class="chat-info">
+                        <span class="contact-name">
+                            <span class="offline-status"></span>
+                            Contact Name 2
+                        </span>
+                        <p class="last-message">Last message sent.</p>
+                    </div>
+                    <span class="time">11:00 AM</span>
+                </li>
+            </ul>
+        </aside>
+        <main class="chat-area">
+            <header class="chat-header">
+                <div class="chat-profile">
+                    <img src="contact1-avatar.png" alt="Contact 1 Avatar">
+                    <div class="chat-details">
+                        <span class="contact-name">
+                            <span class="online-status"></span>
+                            Contact Name 1
+                        </span>
+                        <p class="status">Online</p>
+                    </div>
+                </div>
+                <div class="chat-icons">
+                    <a href="#"><img src="video-call-icon.png" alt="Video Call"></a>
+                    <a href="#"><img src="call-icon.png" alt="Call"></a>
+                </div>
+            </header>
+            <div class="message-area">
+                <!-- Messages will be dynamically inserted here -->
+            </div>
+            <footer class="chat-footer">
+                <div class="emoji-gif-container">
+                    <button id="emoji-gif-button">
+                        <img src="emoji-icon.png" alt="Emoji/GIF">
+                    </button>
+                </div>
+                <input type="text" id="message-input" placeholder="Message" autocomplete="off">
+                <input type="file" id="file-input" accept="*" style="display:none;">
+                <a href="#" class="attach-icon">
+                    <img src="attach-icon.png" alt="Attach" id="attach-button">
+                </a>
+                <button class="send-button" id="send-button"></button>
+            </footer>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
