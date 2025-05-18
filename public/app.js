@@ -60,20 +60,21 @@ class ChatApp {
 
     connectWebSocket() {
         const token = localStorage.getItem("token");
-        this.ws = new WebSocket(`ws://localhost:3000?token=${token}`);
+        // Use the current protocol and host for WebSocket
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const host = window.location.host;
+        this.ws = new WebSocket(`${protocol}://${host}?token=${token}`);
 
         this.ws.onopen = () => {
             console.log('WebSocket connected');
-            this.initChat(); // Enable chat UI only after connection is open
+            this.initChat();
         };
 
         this.ws.onmessage = (event) => this.handleWSMessage(JSON.parse(event.data));
-        
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
             this.showNotification('Connection error', 'error');
         };
-
         this.ws.onclose = () => {
             console.log('WebSocket disconnected');
             this.showNotification('Connection lost', 'error');
