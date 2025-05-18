@@ -266,6 +266,66 @@ class ChatApp {
         }
     }
 
+    async loadContacts() {
+        try {
+        const response = await fetch('/api/contacts', {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+        });
+        const contacts = await response.json();
+        this.renderContacts(contacts);
+        } catch (error) {
+        this.showNotification("Failed to load contacts", "error");
+        }
+    }
+
+    renderContacts(contacts) {
+        const chatList = this.elements.chatList;
+        chatList.innerHTML = '';
+        
+        contacts.forEach(contact => {
+        const li = document.createElement('li');
+        li.className = 'chat-item';
+        li.dataset.contactId = contact.id;
+        li.innerHTML = `
+            <img src="${contact.avatar || 'user-avatar.png'}" alt="${contact.username}">
+            <div class="chat-info">
+            <span class="contact-name">
+                ${contact.username}
+                <span class="status-indicator ${contact.last_online ? 'online' : 'offline'}"></span>
+            </span>
+            <p class="last-message"></p>
+            </div>
+            <span class="time">${this.formatLastOnline(contact.last_online)}</span>
+        `;
+        
+        li.addEventListener('click', () => this.handleContactSelect(contact));
+        chatList.appendChild(li);
+        });
+    }
+
+    async handleContactSelect(contact) {
+        this.activeContact = contact;
+        this.updateChatHeader();
+        await this.loadMessages();
+        this.ws.send(JSON.stringify({
+        type: 'presence',
+        userId: this.user.id,
+        contactId: contact.id,
+        isActive: true
+        }));
+    }
+
+    formatLastOnline(timestamp) {
+        if (!timestamp) return 'Offline';
+        const now = new Date();
+        const lastOnline = new Date(timestamp);
+        const diffHours = Math.abs(now - lastOnline) / 36e5;
+        
+        if (diffHours < 1) return 'Online';
+        if (diffHours < 24) return `${Math.floor(diffHours)}h ago`;
+        return `${Math.floor(diffHours / 24)}d ago`;
+    }
+
     async sendMessage(content, type = "text", fileInfo = null) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.showNotification("Connection not ready", "error");

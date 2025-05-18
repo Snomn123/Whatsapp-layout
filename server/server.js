@@ -84,23 +84,39 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     }
 });
 
+// Get all users except current user
+app.get('/api/contacts', authenticate, (req, res) => {
+    try {
+        const contacts = db.prepare(`
+        SELECT id, username, avatar, last_online
+        FROM users 
+        WHERE id != ?
+        ORDER BY username ASC
+        `).all(req.user.id);
+        res.json(contacts);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to load contacts' });
+    }
+});
+
+// Get conversation between two users
 app.get('/api/messages', authenticate, (req, res) => {
     try {
         const { contactId } = req.query;
         const messages = db.prepare(`
-            SELECT m.*, 
-                GROUP_CONCAT(r.emoji) AS reactions
-            FROM messages m
-            LEFT JOIN reactions r ON m.id = r.message_id
-            WHERE (m.sender_id = ? AND m.receiver_id = ?)
+        SELECT m.*, 
+            (SELECT GROUP_CONCAT(emoji) 
+            FROM reactions r 
+            WHERE r.message_id = m.id) AS reactions
+        FROM messages m
+        WHERE (m.sender_id = ? AND m.receiver_id = ?)
             OR (m.sender_id = ? AND m.receiver_id = ?)
-            GROUP BY m.id
-            ORDER BY m.timestamp ASC
+        ORDER BY m.timestamp ASC
         `).all(req.user.id, contactId, contactId, req.user.id);
 
         res.json(messages.map(msg => ({
-            ...msg,
-            reactions: msg.reactions ? msg.reactions.split(',') : []
+        ...msg,
+        reactions: msg.reactions ? msg.reactions.split(',') : []
         })));
     } catch (err) {
         res.status(500).json({ error: 'Failed to load messages' });
@@ -122,7 +138,15 @@ const server = app.listen(PORT, () =>
     console.log(`Server running on port ${PORT}`));
 const wss = new WebSocket.Server({ server });
 
+
+// EDITTT
 wss.on('connection', (ws) => {
+    db.prepare(`
+        UPDATE users 
+        SET last_online = datetime('now') 
+        WHERE id = ?
+    `).run(ws.userId);
+
     ws.on('message', (data) => {
         try {
             const message = JSON.parse(data);
@@ -142,7 +166,7 @@ wss.on('connection', (ws) => {
                         message.messageType || 'text',
                         'sent'
                     );
-                    
+
                     // Add generated ID and timestamp to message
                     const newMessage = db.prepare(`
                         SELECT *, datetime(timestamp, 'localtime') AS formatted_time
@@ -161,11 +185,37 @@ wss.on('connection', (ws) => {
                         }
                     });
                     break;
-                
+                case 'presence':
+                    db.prepare(`
+                    UPDATE users 
+                    SET last_online = datetime('now') 
+                    WHERE id = ?
+                    `).run(ws.userId);
+
+                    // Notify contact about presence
+                    wss.clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN && 
+                        client.userId === message.contactId) {
+                        client.send(JSON.stringify({
+                        type: 'presence',
+                        userId: ws.userId,
+                        isOnline: true
+                        }));
+                    }
+                    });
+                    break;
                 // Add cases for other message types (typing, reactions, etc.)
             }
         } catch (err) {
             console.error('WebSocket error:', err);
         }
+    });
+
+    ws.on('close', () => {
+        db.prepare(`
+            UPDATE users 
+            SET last_online = datetime('now') 
+            WHERE id = ?
+        `).run(ws.userId);
     });
 });
