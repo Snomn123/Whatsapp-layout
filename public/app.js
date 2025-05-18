@@ -534,7 +534,7 @@ class ChatApp {
             else lastReplyIndex = idx;
         });
 
-        // Only show status on the last sent message, and only if it's after the last reply
+        // Render messages
         this._messageCache.forEach((msg, idx) => {
             const sentByMe = msg.isSent;
             const messageDiv = document.createElement("div");
@@ -550,20 +550,25 @@ class ChatApp {
                 minute: '2-digit'
             });
 
-            // Only show status if this is the last sent message and it's after the last reply
+            // Status logic
             let statusHtml = "";
-            if (
-                sentByMe &&
-                idx === lastSentIndex &&
-                (lastReplyIndex === -1 || lastSentIndex > lastReplyIndex)
-            ) {
-                statusHtml = `<span class="status">${this.getStatusIcon(msg.status)}</span>`;
+            if (sentByMe) {
+                if (msg.status === "sending") {
+                    // Show "sending..." on every sending message
+                    statusHtml = `<span class="status status-right">${this.getStatusIcon(msg.status)}</span>`;
+                } else if (
+                    idx === lastSentIndex &&
+                    (lastReplyIndex === -1 || lastSentIndex > lastReplyIndex)
+                ) {
+                    // Show status only on the last sent message (if not "sending")
+                    statusHtml = `<span class="status status-right">${this.getStatusIcon(msg.status)}</span>`;
+                }
             }
 
             messageDiv.innerHTML = `
                 ${this.getMessageContent(msg)}
                 <div class="meta">
-                    <span class="time">${timestamp}</span>
+                    <span class="time" style="margin-right:auto;">${timestamp}</span>
                     ${statusHtml}
                 </div>
                 ${this.getReactions(msg.reactions)}
@@ -738,6 +743,8 @@ class ChatApp {
     }
 
     async loadMessages() {
+        // Clear message cache when switching contacts
+        this._messageCache = [];
         try {
             if (!this.activeContact?.id) {
                 this.showNotification("No contact selected", "error");

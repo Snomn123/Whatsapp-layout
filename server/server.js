@@ -7,9 +7,10 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const db = require('./database');
+const fs = require('fs');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: '../uploads/' });
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -23,7 +24,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
+app.use('../uploads', express.static('uploads'));
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Authentication middleware
@@ -44,7 +45,7 @@ app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
-    
+
     const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (exists) return res.status(400).json({ error: 'Username taken' });
 
@@ -154,7 +155,7 @@ app.get('/api/messages', authenticate, (req, res) => {
 app.post('/api/upload', upload.single('file'), (req, res) => {
   try {
     res.json({
-      url: `/uploads/${req.file.filename}`,
+      url: `../uploads/${req.file.filename}`,
       name: req.file.originalname,
       type: req.file.mimetype.startsWith('image/') ? 'image' : 'file'
     });
@@ -166,8 +167,28 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 app.post('/api/avatar', authenticate, upload.single('avatar'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const avatarUrl = `/uploads/${req.file.filename}`;
+
+    // Get current avatar path from DB
+    const user = db.prepare('SELECT avatar FROM users WHERE id = ?').get(req.user.id);
+    const oldAvatar = user && user.avatar;
+
+    // Save new avatar
+    const avatarUrl = `./uploads/${req.file.filename}`;
     db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatarUrl, req.user.id);
+
+    // Delete old avatar file if it exists and is not the default
+    if (oldAvatar && oldAvatar.startsWith('../uploads/') && oldAvatar !== avatarUrl) {
+      const relativePath = oldAvatar.startsWith('/') ? oldAvatar.slice(1) : oldAvatar;
+      const oldAvatarPath = path.join(__dirname, '..', relativePath);
+      fs.unlink(oldAvatarPath, err => {
+        if (err) {
+          console.error('Failed to delete old avatar:', oldAvatarPath, err);
+        } else {
+          console.log('Deleted old avatar:', oldAvatarPath);
+        }
+      });
+    }
+
     res.json({ avatar: avatarUrl });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update avatar' });
@@ -184,14 +205,14 @@ app.get('/api/user', authenticate, (req, res) => {
 });
 
 // WebSocket Server
-const server = app.listen(PORT, () => 
+const server = app.listen(PORT, () =>
   console.log(`Server running on port ${PORT}`));
 
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws, req) => {
   const token = new URL(req.url, `http://${req.headers.host}`).searchParams.get('token');
-  
+
   try {
     const user = jwt.verify(token, JWT_SECRET);
     ws.userId = user.id;
@@ -226,7 +247,7 @@ function handleMessage(ws, data) {
       onlineUsers[ws.userId].lastActive = Date.now();
     }
 
-    switch(message.type) {
+    switch (message.type) {
       case 'message':
         const result = db.prepare(`
           INSERT INTO messages (sender_id, receiver_id, content, type, status)
