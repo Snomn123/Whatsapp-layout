@@ -178,6 +178,63 @@ class ChatApp {
             });
         });
         this.elements.themeToggle.addEventListener("click", () => this.toggleDarkMode());
+
+        const avatarInput = document.getElementById('avatar-input');
+        const changeAvatarBtn = document.getElementById('change-avatar-btn');
+        if (changeAvatarBtn && avatarInput) {
+            changeAvatarBtn.onclick = () => avatarInput.click();
+            avatarInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (!file.type.startsWith('image/')) {
+                    this.showNotification('Please select an image file');
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('avatar', file);
+                try {
+                    const res = await fetch('/api/avatar', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                        body: formData
+                    });
+                    if (!res.ok) throw new Error('Upload failed');
+                    const data = await res.json();
+                    // Update avatar in UI
+                    document.getElementById('user-avatar').src = data.avatar;
+                    this.user.avatar = data.avatar;
+                    this.showNotification('Avatar updated!', 'success');
+                } catch {
+                    this.showNotification('Failed to update avatar');
+                }
+            };
+        }
+        if (avatarInput) {
+            avatarInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (!file.type.startsWith('image/')) {
+                    this.showNotification('Please select an image file');
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('avatar', file);
+                try {
+                    const res = await fetch('/api/avatar', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                        body: formData
+                    });
+                    if (!res.ok) throw new Error('Upload failed');
+                    const data = await res.json();
+                    document.getElementById('user-avatar').src = data.avatar;
+                    this.user.avatar = data.avatar;
+                    this.showNotification('Avatar updated!', 'success');
+                } catch {
+                    this.showNotification('Failed to update avatar');
+                }
+            };
+        }
     }
 
     toggleDarkMode() {
@@ -238,9 +295,7 @@ class ChatApp {
         const profileImg = document.querySelector('.user-profile img');
         
         profileSpan.textContent = user.username;
-        if (user.avatar) {
-            profileImg.src = user.avatar;
-        }
+        profileImg.src = user.avatar || 'assets/user-avatar.png';
     }
     
     async handleSendMessage() {
@@ -275,16 +330,29 @@ class ChatApp {
             const li = document.createElement('li');
             li.className = 'chat-item';
             li.dataset.contactId = contact.id;
+
+            // Short status for contact list
+            let shortStatus = "Offline";
+            if (contact.isOnline) shortStatus = "Online";
+            else if (contact.isIdle) shortStatus = "Idle";
+            else if (contact.last_online) {
+                const last = new Date(contact.last_online);
+                const now = new Date();
+                const diff = Math.floor((now - last) / 60000);
+                if (diff < 60) shortStatus = `${diff}m ago`;
+                else if (diff < 1440) shortStatus = `${Math.floor(diff/60)}h ago`;
+                else shortStatus = `${Math.floor(diff/1440)}d ago`;
+            }
+
             li.innerHTML = `
-                <img src="${contact.avatar || 'user-avatar.png'}" alt="${contact.username}">
+                <img src="${contact.avatar || 'assets/user-avatar.png'}" alt="${contact.username}">
                 <div class="chat-info">
                     <span class="contact-name">
                         <span class="online-status ${statusClass}"></span>
                         ${contact.username}
                     </span>
-                    <p class="last-message"></p>
                 </div>
-                <span class="time">${this.formatLastSeen(contact)}</span>
+                <span class="time">${shortStatus}</span>
             `;
             li.addEventListener('click', () => this.handleContactSelect(contact, li));
             chatList.appendChild(li);
@@ -451,31 +519,59 @@ class ChatApp {
     }
 
     addMessage(message, isSent = false, tempId = null) {
-        // Check if message is already displayed
-        const sentByMe = (message.sender_id ?? message.senderId) === this.user.id;
-        const messageDiv = document.createElement("div");
-        messageDiv.className = `message ${sentByMe ? "sent" : "received"}`;
-        messageDiv.dataset.id = message.id;
-        if (tempId || message.tempId) {
-        messageDiv.dataset.tempId = tempId || message.tempId;
-        }
-        
-        // Properly handle message timestamps
-        const timestamp = new Date(message.timestamp).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit'
+        // Store messages in an array for logic
+        if (!this._messageCache) this._messageCache = [];
+        this._messageCache.push({ ...message, isSent });
+
+        // Clear and re-render all messages for the current chat
+        this.elements.messageArea.innerHTML = "";
+        let lastSentIndex = -1;
+        let lastReplyIndex = -1;
+
+        // Find the last sent message index and last reply index
+        this._messageCache.forEach((msg, idx) => {
+            if (msg.isSent) lastSentIndex = idx;
+            else lastReplyIndex = idx;
         });
 
-        messageDiv.innerHTML = `
-            ${this.getMessageContent(message)}
-            <div class="meta">
-            <span class="time">${timestamp}</span>
-            ${isSent ? `<span class="status">${this.getStatusIcon(message.status)}</span>` : ''}
-            </div>
-            ${this.getReactions(message.reactions)}
-        `;
+        // Only show status on the last sent message, and only if it's after the last reply
+        this._messageCache.forEach((msg, idx) => {
+            const sentByMe = msg.isSent;
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `message ${sentByMe ? "sent" : "received"}`;
+            messageDiv.dataset.id = msg.id;
+            if (tempId || msg.tempId) {
+                messageDiv.dataset.tempId = tempId || msg.tempId;
+            }
 
-        this.elements.messageArea.appendChild(messageDiv);
+            // Properly handle message timestamps
+            const timestamp = new Date(msg.timestamp).toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit'
+            });
+
+            // Only show status if this is the last sent message and it's after the last reply
+            let statusHtml = "";
+            if (
+                sentByMe &&
+                idx === lastSentIndex &&
+                (lastReplyIndex === -1 || lastSentIndex > lastReplyIndex)
+            ) {
+                statusHtml = `<span class="status">${this.getStatusIcon(msg.status)}</span>`;
+            }
+
+            messageDiv.innerHTML = `
+                ${this.getMessageContent(msg)}
+                <div class="meta">
+                    <span class="time">${timestamp}</span>
+                    ${statusHtml}
+                </div>
+                ${this.getReactions(msg.reactions)}
+            `;
+
+            this.elements.messageArea.appendChild(messageDiv);
+        });
+
         this.scrollToBottom();
     }
 
@@ -530,13 +626,14 @@ class ChatApp {
     updateChatHeader() {
         const { chatHeader } = this.elements;
         const statusClass = this.getStatusClass(this.activeContact);
+        // Update avatar in chat header
         chatHeader.querySelector(".contact-name").innerHTML =
             `<span class="online-status ${statusClass}"></span> ${this.activeContact.username}`;
         chatHeader.querySelector(".status").textContent =
             this.formatLastSeen(this.activeContact);
     }
 
-async handleFileUpload(file) {
+    async handleFileUpload(file) {
         // Client-side validation
         const MAX_SIZE = 10 * 1024 * 1024; // 10MB
         const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -702,14 +799,14 @@ async handleFileUpload(file) {
 
     formatLastSeen(contact) {
         if (contact.isOnline) return 'Online';
+        if (contact.isIdle) return 'Idle';
         if (contact.last_online) {
             const last = new Date(contact.last_online);
             const now = new Date();
             const diff = Math.floor((now - last) / 60000);
-            if (diff < 60) return `Last seen: ${diff} min ago`;
-            if (diff < 1440) return `Last seen: ${Math.floor(diff/60)}h ago`;
-            // Use user's time zone for formatting
-            return `Last seen: ${last.toLocaleDateString(undefined, { timeZone: this.timeZone })} ${last.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: this.timeZone })}`;
+            if (diff < 60) return `${diff}m ago`;
+            if (diff < 1440) return `${Math.floor(diff/60)}h ago`;
+            return `${Math.floor(diff/1440)}d ago`;
         }
         return 'Offline';
     }

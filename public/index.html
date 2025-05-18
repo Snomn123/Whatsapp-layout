@@ -38,7 +38,10 @@
         <aside class="sidebar">
             <header class="sidebar-header">
                 <div class="user-profile">
-                    <img src="user-avatar.png" alt="User Avatar" id="user-avatar">
+                    <label for="avatar-input" style="margin:0;cursor:pointer;">
+                        <img src="assets/user-avatar.png" alt="User Avatar" id="user-avatar">
+                        <input type="file" id="avatar-input" accept="image/*" style="display:none;">
+                    </label>
                     <span id="user-name">Loading...</span>
                 </div>
                 <div class="sidebar-icons">
@@ -57,13 +60,12 @@
         <main class="chat-area">
             <header class="chat-header">
                 <div class="chat-profile">
-                    <img src="contact1-avatar.png" alt="Contact 1 Avatar">
                     <div class="chat-details">
                         <span class="contact-name">
                             <span class="online-status"></span>
                             Contact Name 1
                         </span>
-                        <p class="status">Online</p>
+                        <p class="status">Last seen ...</p>
                     </div>
                 </div>
                 <div class="chat-icons">

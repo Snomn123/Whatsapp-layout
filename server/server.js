@@ -163,6 +163,17 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
 });
 
+app.post('/api/avatar', authenticate, upload.single('avatar'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const avatarUrl = `/uploads/${req.file.filename}`;
+    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatarUrl, req.user.id);
+    res.json({ avatar: avatarUrl });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update avatar' });
+  }
+});
+
 app.get('/api/user', authenticate, (req, res) => {
   try {
     const user = db.prepare('SELECT id, username, avatar, last_online FROM users WHERE id = ?').get(req.user.id);
@@ -243,7 +254,6 @@ function handleMessage(ws, data) {
         });
         break;
 
-      case 'presence':
       case 'activity':
         db.prepare(`UPDATE users SET last_online = datetime('now') WHERE id = ?`)
           .run(ws.userId);
