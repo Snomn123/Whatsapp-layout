@@ -10,12 +10,24 @@
 <body>
     <div class="auth-container" style="display: none;">
         <div class="auth-form">
-            <h2>Welcome to WhatsApp Clone</h2>
-            <form id="login-form">
-                <input type="text" placeholder="Username" id="username" required>
-                <input type="password" placeholder="Password" id="password" required>
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-form="login">Login</button>
+                <button class="auth-tab" data-form="register">Register</button>
+            </div>
+            
+            <form id="login-form" class="auth-content active">
+                <input type="text" placeholder="Username" id="login-username" required>
+                <input type="password" placeholder="Password" id="login-password" required>
                 <button type="submit">Login</button>
             </form>
+
+            <form id="register-form" class="auth-content">
+                <input type="text" placeholder="Username" id="register-username" required>
+                <input type="password" placeholder="Password" id="register-password" required>
+                <input type="password" placeholder="Confirm Password" id="confirm-password" required>
+                <button type="submit">Register</button>
+            </form>
+
             <p class="auth-error"></p>
         </div>
     </div>

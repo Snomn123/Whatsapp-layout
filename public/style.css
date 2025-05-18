@@ -702,3 +702,32 @@ body.dark-mode {
         transform: translateX(0);
     }
 }
+
+/* Auth Tabs */
+.auth-tabs {
+    display: flex;
+    margin-bottom: 1.5rem;
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    background: #f0f2f5;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.3s ease;
+}
+
+.auth-tab.active {
+    background: #008069;
+    color: white;
+}
+
+.auth-content {
+    display: none;
+}
+
+.auth-content.active {
+    display: block;
+}

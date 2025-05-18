@@ -34,7 +34,7 @@ class ChatApp {
             contactNames: document.querySelectorAll(".contact-name"),
             lastMessages: document.querySelectorAll(".last-message"),
             timeStamps: document.querySelectorAll(".time"),
-            chatItems: document.querySelectorAll(".chat-item") // Removed trailing comma here
+            chatItems: document.querySelectorAll(".chat-item")
         };
     }
 
@@ -85,30 +85,70 @@ class ChatApp {
     }
 
     initAuthListeners() {
+        // Add tab switching
+        document.querySelectorAll('.auth-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                document.querySelectorAll('.auth-tab, .auth-content').forEach(el => {
+                    el.classList.remove('active');
+                });
+                const form = e.target.dataset.form;
+                e.target.classList.add('active');
+                document.getElementById(`${form}-form`).classList.add('active');
+            });
+        });
+
+        // Updated login handler
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
+            await this.handleAuth({
+                username: document.getElementById('login-username').value,
+                password: document.getElementById('login-password').value
+            }, '/api/login');
+        });
+
+        // New registration handler
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('register-password').value;
+            const confirm = document.getElementById('confirm-password').value;
             
-            try {
-                const response = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password }) 
-                });
-                
-                const data = await response.json();
-                if (response.ok) {
+            if (password !== confirm) {
+                this.showAuthError('Passwords do not match');
+                return;
+            }
+
+            await this.handleAuth({
+                username: document.getElementById('register-username').value,
+                password: password
+            }, '/api/register');
+        });
+    }
+
+    async handleAuth(credentials, endpoint) {
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(credentials)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                if (endpoint === '/api/register') {
+                    this.showAuthError('Registration successful! Please login');
+                    document.querySelector('[data-form="login"]').click();
+                } else {
                     localStorage.setItem('token', data.token);
                     this.user = data.user;
                     this.initChat();
-                } else {
-                    this.showAuthError(data.error || 'Login failed');
                 }
-            } catch (error) {
-                this.showAuthError('Connection error');
+            } else {
+                this.showAuthError(data.error || 'Authentication failed');
             }
-        });
+        } catch (error) {
+            this.showAuthError('Connection error');
+        }
     }
 
     initEventListeners() {
@@ -308,16 +348,26 @@ class ChatApp {
     }
 
     getMessageContent(message) {
+        const sanitize = (text) => {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        };
+
         if (message.messageType === 'file') {
             return `<div class="file-message">
                 <i class="fas fa-file"></i>
-                <a href="${message.content}" download>${message.name || 'Download File'}</a>
+                <a href="${sanitize(message.content)}" download>
+                    ${sanitize(message.name || 'Download File')}
+                </a>
             </div>`;
         }
+        
         if (message.messageType === 'image') {
-            return `<img src="${message.content}" class="message-image">`;
+            return `<img src="${sanitize(message.content)}" class="message-image" alt="Uploaded image">`;
         }
-        return `<p>${message.content}</p>`;
+        
+        return `<p>${sanitize(message.content)}</p>`;
     }
 
     getMessageMeta(message, isSent) {
@@ -355,43 +405,62 @@ class ChatApp {
         chatHeader.querySelector(".status").textContent = this.activeContact.status;
     }
 
-    async handleFileUpload(file) {
+async handleFileUpload(file) {
+        // Client-side validation
+        const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+        
+        if (file.size > MAX_SIZE) {
+            this.showNotification('File too large (max 10MB)');
+            return;
+        }
+        
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            this.showNotification('Invalid file type');
+            return;
+        }
+
+        // Proceed with upload
         const formData = new FormData();
         formData.append("file", file);
-
+        
         try {
             const res = await fetch("/api/upload", {
                 method: "POST",
                 body: formData,
             });
+            
+            if (!res.ok) throw new Error('Upload failed');
+            
             const fileInfo = await res.json();
             this.sendMessage(fileInfo.url, "file", fileInfo);
         } catch (error) {
-            console.error("Upload failed:", error);
             this.showNotification("File upload failed");
         }
     }
 
     handleTypingIndicator() {
-        clearTimeout(this.typingTimer);
-        this.ws.send(
-            JSON.stringify({
-                type: "typing",
-                senderId: this.user.id,
-                receiverId: this.activeContact.id,
-                typing: true,
-            })
-        );
-        this.typingTimer = setTimeout(() => {
-            this.ws.send(
-                JSON.stringify({
+        clearTimeout(this.typingDebounce);
+        this.typingDebounce = setTimeout(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({
                     type: "typing",
                     senderId: this.user.id,
                     receiverId: this.activeContact.id,
                     typing: false,
-                })
-            );
-        }, 2000);
+                }));
+            }
+        }, 1000);
+
+        if (!this.typingState) {
+            this.typingState = true;
+            this.ws.send(JSON.stringify({
+                type: "typing",
+                senderId: this.user.id,
+                receiverId: this.activeContact.id,
+                typing: true,
+            }));
+        }
     }
 
     showReactionPicker(e, messageId) {
