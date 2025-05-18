@@ -107,7 +107,7 @@ app.get('/api/messages', authenticate, (req, res) => {
         (SELECT GROUP_CONCAT(emoji) FROM reactions WHERE message_id = m.id) AS reactions
       FROM messages m
       WHERE (sender_id = ? AND receiver_id = ?)
-         OR (sender_id = ? AND receiver_id = ?)
+        OR (sender_id = ? AND receiver_id = ?)
       ORDER BY timestamp ASC
     `).all(req.user.id, contactId, contactId, req.user.id);
 
@@ -133,6 +133,15 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
 });
 
+app.get('/api/user', authenticate, (req, res) => {
+  try {
+    const user = db.prepare('SELECT id, username, avatar, last_online FROM users WHERE id = ?').get(req.user.id);
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
 // WebSocket Server
 const server = app.listen(PORT, () => 
   console.log(`Server running on port ${PORT}`));
@@ -150,7 +159,13 @@ wss.on('connection', (ws, req) => {
       .run(user.id);
 
     ws.on('message', data => handleMessage(ws, data));
-    ws.on('close', () => updatePresence(ws.userId, false));
+    ws.on('close', () => {
+      db.prepare(`UPDATE users SET last_online = datetime('now') WHERE id = ?`).run(ws.userId);
+      broadcast(
+        /* all connected clients except this one */
+        { type: 'presence', userId: ws.userId, isOnline: false }
+      );
+    });
 
   } catch (err) {
     ws.close(1008, 'Invalid token');
@@ -176,7 +191,8 @@ function handleMessage(ws, data) {
         broadcast([message.senderId, message.receiverId], {
           ...newMessage,
           type: 'message',
-          reactions: []
+          reactions: [],
+          tempId: message.tempId
         });
         break;
 
@@ -191,6 +207,28 @@ function handleMessage(ws, data) {
       case 'presence':
         db.prepare(`UPDATE users SET last_online = datetime('now') WHERE id = ?`)
           .run(ws.userId);
+        break;
+
+      case 'status-update':
+        // Mark messages as read
+        db.prepare(`
+          UPDATE messages
+          SET status = ?
+          WHERE sender_id = ? AND receiver_id = ? AND status != 'read'
+        `).run('read', message.senderId, message.receiverId);
+
+        // Get updated message IDs
+        const updated = db.prepare(`
+          SELECT id FROM messages
+          WHERE sender_id = ? AND receiver_id = ? AND status = 'read'
+        `).all(message.senderId, message.receiverId);
+
+        // Notify sender about read messages
+        broadcast([message.senderId], {
+          type: 'status-update',
+          messageIds: updated.map(m => m.id),
+          status: 'read'
+        });
         break;
     }
   } catch (err) {

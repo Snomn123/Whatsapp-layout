@@ -39,8 +39,7 @@ class ChatApp {
         if (token) {
             try {
                 this.user = await this.fetchUser();
-                this.initChat();
-                this.connectWebSocket();
+                this.connectWebSocket(); // Connect first
             } catch {
                 this.showAuth();
                 localStorage.removeItem('token');
@@ -65,6 +64,7 @@ class ChatApp {
 
         this.ws.onopen = () => {
             console.log('WebSocket connected');
+            this.initChat(); // Enable chat UI only after connection is open
         };
 
         this.ws.onmessage = (event) => this.handleWSMessage(JSON.parse(event.data));
@@ -283,13 +283,20 @@ class ChatApp {
         this.activeContact = contact;
         this.updateChatHeader();
         await this.loadMessages();
-        
-        // Update presence
+
+        // Mark messages as read
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({
-            type: 'presence',
-            contactId: contact.id,
-            isActive: true
+                type: 'presence',
+                contactId: contact.id,
+                isActive: true
+            }));
+
+            // Send status update for read messages
+            this.ws.send(JSON.stringify({
+                type: 'status-update',
+                senderId: contact.id, // messages FROM this contact
+                receiverId: this.user.id // TO me
             }));
         }
     }
@@ -332,21 +339,34 @@ class ChatApp {
             id: tempId,
             status: 'sending'
         };
-        this.addMessage(tempMessage, true);
+        this.addMessage(tempMessage, true, tempId);
     }
 
     handleWSMessage(message) {
         switch (message.type) {
             case "message":
                 this.handleIncomingMessage(message);
-            break;
+                break;
+            case "status-update":
+                this.updateMessageStatus(message.messageIds, message.status);
+                break;
             case "presence":
                 this.updateContactStatus(message.userId, message.isOnline);
-            break;
+                break;
             case "reaction":
                 this.addReaction(message);
-            break;
+                break;
         }
+    }
+
+    updateMessageStatus(messageIds, status) {
+        messageIds.forEach(id => {
+            const msgDiv = this.elements.messageArea.querySelector(`[data-id="${id}"]`);
+            if (msgDiv) {
+                const statusSpan = msgDiv.querySelector('.status');
+                if (statusSpan) statusSpan.textContent = this.getStatusIcon(status);
+            }
+        });
     }
 
     updateContactStatus(userId, isOnline) {
@@ -365,15 +385,21 @@ class ChatApp {
             tempMsg.dataset.id = message.id;
             tempMsg.querySelector('.status').textContent = '✓✓';
             tempMsg.dataset.tempId = null;
+            // Optionally update other fields if needed
         } else {
-            this.addMessage(message, message.senderId === this.user.id);
+            this.addMessage(message, (message.sender_id ?? message.senderId) === this.user.id);
         }
     }
 
-    addMessage(message, isSent = false) {
+    addMessage(message, isSent = false, tempId = null) {
+        // Check if message is already displayed
+        const sentByMe = (message.sender_id ?? message.senderId) === this.user.id;
         const messageDiv = document.createElement("div");
-        messageDiv.className = `message ${isSent ? "sent" : "received"}`;
+        messageDiv.className = `message ${sentByMe ? "sent" : "received"}`;
         messageDiv.dataset.id = message.id;
+        if (tempId || message.tempId) {
+        messageDiv.dataset.tempId = tempId || message.tempId;
+        }
         
         // Properly handle message timestamps
         const timestamp = new Date(message.timestamp).toLocaleTimeString([], { 
@@ -396,10 +422,9 @@ class ChatApp {
 
     getStatusIcon(status) {
         switch(status) {
-            case 'sent': return '✓';
-            case 'delivered': return '✓✓';
-            case 'read': return '✓✓';
-            default: return '🕒';
+            case 'sent': return 'sent';
+            case 'read': return 'seen';
+            default: return 'sending...';
         }
     }
 
