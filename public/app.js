@@ -3,7 +3,7 @@ class ChatApp {
         this.ws = null;
         this.user = null;
         this.activeContact = null;
-        this.typingTimer = null;
+        this.typingState = null;
 
         this.initDOMElements();
         this.initAuthListeners();
@@ -30,11 +30,7 @@ class ChatApp {
             searchContainer: document.querySelector(".search-container"),
             chatArea: document.querySelector(".chat-area"),
             chatFooter: document.querySelector(".chat-footer"),
-            searchInput: document.querySelector(".search-container input"),
-            contactNames: document.querySelectorAll(".contact-name"),
-            lastMessages: document.querySelectorAll(".last-message"),
-            timeStamps: document.querySelectorAll(".time"),
-            chatItems: document.querySelectorAll(".chat-item")
+            searchInput: document.querySelector(".search-container input")
         };
     }
 
@@ -64,11 +60,11 @@ class ChatApp {
     }
 
     connectWebSocket() {
-        this.ws = new WebSocket("ws://localhost:3000");
+        const token = localStorage.getItem("token");
+        this.ws = new WebSocket(`ws://localhost:3000?token=${token}`);
 
         this.ws.onopen = () => {
             console.log('WebSocket connected');
-            this.loadMessages();
         };
 
         this.ws.onmessage = (event) => this.handleWSMessage(JSON.parse(event.data));
@@ -166,11 +162,6 @@ class ChatApp {
                 this.handleTypingIndicator();
             }
         });
-
-        this.elements.chatList.addEventListener("click", (e) => {
-            const chatItem = e.target.closest(".chat-item");
-            if (chatItem) this.handleChatChange(chatItem);
-        });
     }
 
     toggleDarkMode() {
@@ -198,14 +189,6 @@ class ChatApp {
             safeToggle(input, "dark-mode-input")
         );
 
-        // Toggle text elements
-        [
-            this.elements.userProfileSpan,
-            ...Array.from(this.elements.contactNames),
-            ...Array.from(this.elements.lastMessages),
-            ...Array.from(this.elements.timeStamps)
-        ].forEach(el => safeToggle(el, "dark-mode-text"));
-
         // Toggle messages
         document.querySelectorAll(".message").forEach(msg => {
             msg.classList.toggle(msg.classList.contains("received") ?
@@ -213,13 +196,6 @@ class ChatApp {
                 "dark-mode-sent"
             );
         });
-
-        // Toggle chat items
-        if (this.elements.chatItems) {
-            Array.from(this.elements.chatItems).forEach(item => 
-                safeToggle(item, "dark-mode-chat-item")
-            );
-        }
 
         // Update theme toggle icon
         const isDark = this.elements.body.classList.contains("dark-mode");
@@ -367,9 +343,6 @@ class ChatApp {
             case "presence":
                 this.updateContactStatus(message.userId, message.isOnline);
             break;
-            case "typing":
-                this.showTypingIndicator(message);
-            break;
             case "reaction":
                 this.addReaction(message);
             break;
@@ -470,22 +443,12 @@ class ChatApp {
         return `<div class="reactions">${reactions.map(r => `<span class="reaction">${r}</span>`).join('')}</div>`;
     }
 
-
-    handleChatChange(chatItem) {
-        this.activeContact = {
-            id: parseInt(chatItem.dataset.contactId), // Ensure numeric ID
-            name: chatItem.dataset.contactName,
-            status: chatItem.dataset.status,
-        };
-        this.updateChatHeader();
-        this.loadMessages();
-    }
-
     updateChatHeader() {
         const { chatHeader } = this.elements;
-        chatHeader.querySelector(".contact-name").textContent =
-            this.activeContact.name;
-        chatHeader.querySelector(".status").textContent = this.activeContact.status;
+        chatHeader.querySelector(".contact-name").innerHTML =
+            `<span class="online-status ${this.activeContact.status === 'online' ? 'online' : 'offline'}"></span> ${this.activeContact.username}`;
+        chatHeader.querySelector(".status").textContent =
+            this.activeContact.status === 'online' ? 'Online' : 'Last seen: ' + this.formatLastOnline(this.activeContact.last_online);
     }
 
 async handleFileUpload(file) {
@@ -585,14 +548,10 @@ async handleFileUpload(file) {
         }
     }
 
-    showAuth() {
-        this.elements.authContainer.style.display = "block";
-        this.elements.mainContainer.style.display = "none";
-    }
-
     initChat() {
         this.elements.authContainer.style.display = "none";
         this.elements.mainContainer.style.display = "flex";
+        this.loadContacts();
         this.loadMessages();
     }
 

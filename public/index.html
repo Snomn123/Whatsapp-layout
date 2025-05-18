@@ -33,9 +33,10 @@
             <p class="auth-error"></p>
         </div>
     </div>
+
     <div class="container">
         <aside class="sidebar">
-            <header>
+            <header class="sidebar-header">
                 <div class="user-profile">
                     <img src="user-avatar.png" alt="User Avatar" id="user-avatar">
                     <span id="user-name">Loading...</span>
@@ -48,32 +49,9 @@
                 <input type="text" placeholder="Search contacts">
             </div>
             <ul class="chat-list" id="chat-list">
-                <ul class="chat-list">
-                    <li class="chat-item active" data-contact-id="1" data-contact-name="Contact Name 1"
-                        data-status="online">
-                        <img src="contact1-avatar.png" alt="Contact 1 Avatar">
-                        <div class="chat-info">
-                            <span class="contact-name">
-                                <span class="online-status"></span>
-                                Contact Name 1
-                            </span>
-                            <p class="last-message">Last message received...</p>
-                        </div>
-                        <span class="time">10:30 AM</span>
-                    </li>
-                    <li class="chat-item" data-contact-id="2" data-contact-name="Contact Name 2" data-status="offline">
-                        <img src="contact2-avatar.png" alt="Contact 2 Avatar">
-                        <div class="chat-info">
-                            <span class="contact-name">
-                                <span class="offline-status"></span>
-                                Contact Name 2
-                            </span>
-                            <p class="last-message">Last message sent.</p>
-                        </div>
-                        <span class="time">11:00 AM</span>
-                    </li>
-                </ul>
         </aside>
+
+
         <main class="chat-area">
             <header class="chat-header">
                 <div class="chat-profile">
