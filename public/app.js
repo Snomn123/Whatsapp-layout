@@ -4,6 +4,7 @@ class ChatApp {
         this.user = null;
         this.activeContact = null;
         this.typingState = null;
+        this.timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
         this.initDOMElements();
         this.initAuthListeners();
@@ -252,17 +253,21 @@ class ChatApp {
 
     async loadContacts() {
         try {
-        const response = await fetch('/api/contacts', {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
-        const contacts = await response.json();
-        this.renderContacts(contacts);
+            const response = await fetch('/api/contacts', {
+                headers: { 
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    'X-Timezone': this.timeZone
+                }
+            });
+            const contacts = await response.json();
+            this.renderContacts(contacts);
         } catch (error) {
-        this.showNotification("Failed to load contacts", "error");
+            this.showNotification("Failed to load contacts", "error");
         }
     }
 
     renderContacts(contacts) {
+        this._contactsCache = contacts; // cache for status updates
         const chatList = this.elements.chatList;
         chatList.innerHTML = '';
         contacts.forEach(contact => {
@@ -365,11 +370,22 @@ class ChatApp {
                 this.updateMessageStatus(message.messageIds, message.status);
                 break;
             case "presence":
-                this.updateContactStatus(message.userId, message.isOnline);
+                this.updateContactStatus(message.userId, message.isOnline, message.isIdle);
+                break;
+            case "new-contact":
+                this.addNewContact(message.contact);
                 break;
             case "reaction":
                 this.addReaction(message);
                 break;
+        }
+    }
+
+    addNewContact(contact) {
+        // Avoid duplicates
+        if (this._contactsCache && !this._contactsCache.some(c => c.id === contact.id)) {
+            this._contactsCache.push(contact);
+            this.renderContacts(this._contactsCache);
         }
     }
 
@@ -383,13 +399,41 @@ class ChatApp {
         });
     }
 
-    updateContactStatus(userId, isOnline) {
+    updateContactStatus(userId, isOnline, isIdle) {
+        // Update contact in chat list
         const contactItem = document.querySelector(`[data-contact-id="${userId}"]`);
         if (contactItem) {
-            const statusIndicator = contactItem.querySelector('.status-indicator');
-            statusIndicator.classList.toggle('online', isOnline);
-            statusIndicator.classList.toggle('offline', !isOnline);
+            // Update the status dot
+            const statusDot = contactItem.querySelector('.online-status');
+            if (statusDot) {
+                statusDot.classList.remove('online', 'idle', 'offline');
+                if (isOnline) statusDot.classList.add('online');
+                else if (isIdle) statusDot.classList.add('idle');
+                else statusDot.classList.add('offline');
+            }
+            // Optionally update the "last seen" text
+            const contact = this.getContactById(userId);
+            if (contact) {
+                contact.isOnline = isOnline;
+                contact.isIdle = isIdle;
+                // Update the time text
+                const timeSpan = contactItem.querySelector('.time');
+                if (timeSpan) timeSpan.textContent = this.formatLastSeen(contact);
+            }
         }
+
+        // Update chat header if this contact is active
+        if (this.activeContact && this.activeContact.id === userId) {
+            if (isOnline !== undefined) this.activeContact.isOnline = isOnline;
+            if (isIdle !== undefined) this.activeContact.isIdle = isIdle;
+            this.updateChatHeader();
+        }
+    }
+
+    // Helper to get contact object by id (from last loaded contacts)
+    getContactById(userId) {
+        if (!this._contactsCache) return null;
+        return this._contactsCache.find(c => c.id === userId);
     }
 
     handleIncomingMessage(message) {
@@ -660,10 +704,12 @@ async handleFileUpload(file) {
         if (contact.isOnline) return 'Online';
         if (contact.last_online) {
             const last = new Date(contact.last_online);
-            const diff = Math.floor((Date.now() - last.getTime()) / 60000);
+            const now = new Date();
+            const diff = Math.floor((now - last) / 60000);
             if (diff < 60) return `Last seen: ${diff} min ago`;
             if (diff < 1440) return `Last seen: ${Math.floor(diff/60)}h ago`;
-            return `Last seen: ${last.toLocaleDateString()} ${last.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
+            // Use user's time zone for formatting
+            return `Last seen: ${last.toLocaleDateString(undefined, { timeZone: this.timeZone })} ${last.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: this.timeZone })}`;
         }
         return 'Offline';
     }

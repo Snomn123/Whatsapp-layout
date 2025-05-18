@@ -54,6 +54,19 @@ app.post('/api/register', async (req, res) => {
       VALUES (?, ?)
     `).run(username, hashedPassword);
 
+    // Fetch the new user info
+    const newUser = db.prepare('SELECT id, username, avatar, last_online FROM users WHERE id = ?').get(result.lastInsertRowid);
+
+    // Broadcast to all clients
+    broadcastAll({
+      type: 'new-contact',
+      contact: {
+        ...newUser,
+        isOnline: false,
+        isIdle: false
+      }
+    });
+
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (err) {
     res.status(500).json({ error: 'Registration failed' });
@@ -284,6 +297,14 @@ function broadcastPresence(userId, isOnline, isIdle) {
 function broadcast(userIds, message) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && userIds.includes(client.userId)) {
+      client.send(JSON.stringify(message));
+    }
+  });
+}
+
+function broadcastAll(message) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
     }
   });
