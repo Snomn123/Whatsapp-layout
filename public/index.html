@@ -42,7 +42,9 @@
                     <span id="user-name">Loading...</span>
                 </div>
                 <div class="sidebar-icons">
-                    <button id="theme-toggle"><img src="dark-mode-icon.png" alt="Dark Mode"></button>
+                    <button id="theme-toggle">
+                        <span id="theme-icon"></span>
+                    </button>
                 </div>
             </header>
             <div class="search-container">
@@ -69,9 +71,7 @@
                     <a href="#"><img src="call-icon.png" alt="Call"></a>
                 </div>
             </header>
-            <div class="message-area">
-                <!-- Messages will be dynamically inserted here -->
-            </div>
+            <div class="message-area"></div>
             <footer class="chat-footer">
                 <div class="emoji-gif-container">
                     <button id="emoji-gif-button">
@@ -83,7 +83,9 @@
                 <a href="#" class="attach-icon">
                     <img src="attach-icon.png" alt="Attach" id="attach-button">
                 </a>
-                <button class="send-button" id="send-button"></button>
+                <button class="send-button" id="send-button">
+                    <span class="send-arrow"></span>
+                </button>
             </footer>
         </main>
     </div>

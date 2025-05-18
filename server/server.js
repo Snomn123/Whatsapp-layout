@@ -13,6 +13,9 @@ const upload = multer({ dest: 'uploads/' });
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// In-memory presence tracking
+const onlineUsers = {}; // { userId: { ws, lastActive: Date } }
+
 // Middleware
 app.use(cors({
   origin: process.env.CLIENT_URL,
@@ -89,11 +92,25 @@ app.get('/api/contacts', authenticate, (req, res) => {
       WHERE id != ?
       ORDER BY last_online DESC
     `).all(req.user.id);
-    
-    res.json(contacts.map(c => ({
-      ...c,
-      status: Date.now() - new Date(c.last_online).getTime() < 300000 ? 'online' : 'offline'
-    })));
+
+    const now = Date.now();
+    res.json(contacts.map(c => {
+      const onlineInfo = onlineUsers[c.id];
+      let isOnline = false, isIdle = false;
+      if (onlineInfo) {
+        const diff = now - onlineInfo.lastActive;
+        if (diff <= 5 * 60 * 1000) {
+          isOnline = true;
+        } else {
+          isIdle = true;
+        }
+      }
+      return {
+        ...c,
+        isOnline,
+        isIdle
+      };
+    }));
   } catch (err) {
     res.status(500).json({ error: 'Failed to load contacts' });
   }
@@ -154,18 +171,22 @@ wss.on('connection', (ws, req) => {
   try {
     const user = jwt.verify(token, JWT_SECRET);
     ws.userId = user.id;
-    
+
+    // Mark user as online and set lastActive
+    onlineUsers[user.id] = { ws, lastActive: Date.now() };
+
     db.prepare(`UPDATE users SET last_online = datetime('now') WHERE id = ?`)
       .run(user.id);
 
     ws.on('message', data => handleMessage(ws, data));
     ws.on('close', () => {
       db.prepare(`UPDATE users SET last_online = datetime('now') WHERE id = ?`).run(ws.userId);
-      broadcast(
-        /* all connected clients except this one */
-        { type: 'presence', userId: ws.userId, isOnline: false }
-      );
+      delete onlineUsers[ws.userId];
+      broadcastPresence(ws.userId, false, false);
     });
+
+    // Immediately broadcast online presence
+    broadcastPresence(user.id, true, false);
 
   } catch (err) {
     ws.close(1008, 'Invalid token');
@@ -175,7 +196,12 @@ wss.on('connection', (ws, req) => {
 function handleMessage(ws, data) {
   try {
     const message = JSON.parse(data);
-    
+
+    // Update lastActive on any message
+    if (ws.userId && onlineUsers[ws.userId]) {
+      onlineUsers[ws.userId].lastActive = Date.now();
+    }
+
     switch(message.type) {
       case 'message':
         const result = db.prepare(`
@@ -205,8 +231,12 @@ function handleMessage(ws, data) {
         break;
 
       case 'presence':
+      case 'activity':
         db.prepare(`UPDATE users SET last_online = datetime('now') WHERE id = ?`)
           .run(ws.userId);
+        if (onlineUsers[ws.userId]) {
+          onlineUsers[ws.userId].lastActive = Date.now();
+        }
         break;
 
       case 'status-update':
@@ -236,6 +266,21 @@ function handleMessage(ws, data) {
   }
 }
 
+// Broadcast presence to all clients
+function broadcastPresence(userId, isOnline, isIdle) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: 'presence',
+        userId,
+        isOnline,
+        isIdle
+      }));
+    }
+  });
+}
+
+// Broadcast to specific userIds (array)
 function broadcast(userIds, message) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && userIds.includes(client.userId)) {
@@ -243,3 +288,19 @@ function broadcast(userIds, message) {
     }
   });
 }
+
+// Idle detection: check every minute
+setInterval(() => {
+  const now = Date.now();
+  Object.entries(onlineUsers).forEach(([userId, { ws, lastActive }]) => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    const diff = now - lastActive;
+    if (diff > 5 * 60 * 1000) {
+      // Idle
+      broadcastPresence(Number(userId), false, true);
+    } else {
+      // Online
+      broadcastPresence(Number(userId), true, false);
+    }
+  });
+}, 60000);

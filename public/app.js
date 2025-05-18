@@ -79,6 +79,12 @@ class ChatApp {
             console.log('WebSocket disconnected');
             this.showNotification('Connection lost', 'error');
         };
+
+        setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ type: 'activity' }));
+            }
+        }, 60000);
     }
 
     initAuthListeners() {
@@ -163,6 +169,14 @@ class ChatApp {
                 this.handleTypingIndicator();
             }
         });
+        this.elements.searchInput.addEventListener("input", (e) => {
+            const query = e.target.value.toLowerCase();
+            document.querySelectorAll('.chat-item').forEach(item => {
+                const name = item.querySelector('.contact-name').textContent.toLowerCase();
+                item.style.display = name.includes(query) ? "" : "none";
+            });
+        });
+        this.elements.themeToggle.addEventListener("click", () => this.toggleDarkMode());
     }
 
     toggleDarkMode() {
@@ -185,34 +199,27 @@ class ChatApp {
             this.elements.messageArea
         ].forEach(el => safeToggle(el, "dark-mode"));
 
-        // Toggle input fields
-        [this.elements.searchInput, this.elements.messageInput].forEach(input => 
-            safeToggle(input, "dark-mode-input")
-        );
-
-        // Toggle messages
-        document.querySelectorAll(".message").forEach(msg => {
-            msg.classList.toggle(msg.classList.contains("received") ?
-                "dark-mode-received" :
-                "dark-mode-sent"
-            );
-        });
-
         // Update theme toggle icon
         const isDark = this.elements.body.classList.contains("dark-mode");
-        if (this.elements.themeToggle) {
-            this.elements.themeToggle.innerHTML = isDark ?
-                '<img src="light-mode-icon.png" alt="Light Mode">' :
-                '<img src="dark-mode-icon.png" alt="Dark Mode">';
-        }
-
-        // Save theme preference
+        this.setThemeIcon(isDark);
         localStorage.setItem("theme", isDark ? "dark" : "light");
     }
 
     initDarkMode() {
         const savedTheme = localStorage.getItem("theme");
-        if (savedTheme === "dark") this.toggleDarkMode();
+        const isDark = savedTheme === "dark";
+        if (isDark) this.toggleDarkMode();
+        this.setThemeIcon(isDark);
+    }
+
+    setThemeIcon(isDark) {
+        const themeIcon = document.getElementById("theme-icon");
+        if (!themeIcon) return;
+        themeIcon.innerHTML = isDark
+            // White moon for dark mode
+            ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z" fill="#fff"/></svg>`
+            // Black sun for light mode
+            : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" fill="#111"/><g stroke="#111" stroke-width="2"><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></g></svg>`;
     }
 
     async fetchUser() {
@@ -258,30 +265,36 @@ class ChatApp {
     renderContacts(contacts) {
         const chatList = this.elements.chatList;
         chatList.innerHTML = '';
-        
         contacts.forEach(contact => {
-        const li = document.createElement('li');
-        li.className = 'chat-item';
-        li.dataset.contactId = contact.id;
-        li.innerHTML = `
-            <img src="${contact.avatar || 'user-avatar.png'}" alt="${contact.username}">
-            <div class="chat-info">
-            <span class="contact-name">
-                ${contact.username}
-                <span class="status-indicator ${contact.last_online ? 'online' : 'offline'}"></span>
-            </span>
-            <p class="last-message"></p>
-            </div>
-            <span class="time">${this.formatLastOnline(contact.last_online)}</span>
-        `;
-        
-        li.addEventListener('click', () => this.handleContactSelect(contact));
-        chatList.appendChild(li);
+            const statusClass = this.getStatusClass(contact);
+            const li = document.createElement('li');
+            li.className = 'chat-item';
+            li.dataset.contactId = contact.id;
+            li.innerHTML = `
+                <img src="${contact.avatar || 'user-avatar.png'}" alt="${contact.username}">
+                <div class="chat-info">
+                    <span class="contact-name">
+                        <span class="online-status ${statusClass}"></span>
+                        ${contact.username}
+                    </span>
+                    <p class="last-message"></p>
+                </div>
+                <span class="time">${this.formatLastSeen(contact)}</span>
+            `;
+            li.addEventListener('click', () => this.handleContactSelect(contact, li));
+            chatList.appendChild(li);
+
+            if (this.activeContact && this.activeContact.id === contact.id) {
+                li.classList.add('active');
+            }
         });
     }
 
-    async handleContactSelect(contact) {
+    async handleContactSelect(contact, liElement) {
         this.activeContact = contact;
+        // Remove 'active' from all, add to selected
+        document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
+        if (liElement) liElement.classList.add('active');
         this.updateChatHeader();
         await this.loadMessages();
 
@@ -384,7 +397,8 @@ class ChatApp {
         const tempMsg = this.elements.messageArea.querySelector(`[data-temp-id="${message.tempId}"]`);
         if (tempMsg) {
             tempMsg.dataset.id = message.id;
-            tempMsg.querySelector('.status').textContent = '✓✓';
+            const statusSpan = tempMsg.querySelector('.status');
+            if (statusSpan) statusSpan.textContent = this.getStatusIcon(message.status);
             tempMsg.dataset.tempId = null;
             // Optionally update other fields if needed
         } else {
@@ -471,10 +485,11 @@ class ChatApp {
 
     updateChatHeader() {
         const { chatHeader } = this.elements;
+        const statusClass = this.getStatusClass(this.activeContact);
         chatHeader.querySelector(".contact-name").innerHTML =
-            `<span class="online-status ${this.activeContact.status === 'online' ? 'online' : 'offline'}"></span> ${this.activeContact.username}`;
+            `<span class="online-status ${statusClass}"></span> ${this.activeContact.username}`;
         chatHeader.querySelector(".status").textContent =
-            this.activeContact.status === 'online' ? 'Online' : 'Last seen: ' + this.formatLastOnline(this.activeContact.last_online);
+            this.formatLastSeen(this.activeContact);
     }
 
 async handleFileUpload(file) {
@@ -627,6 +642,30 @@ async handleFileUpload(file) {
         document.body.appendChild(notification);
 
         setTimeout(() => notification.remove(), 3000);
+    }
+
+    getStatusClass(contact) {
+        // Assume contact.last_online is an ISO string and contact.isOnline is set by server
+        if (contact.isOnline) return 'online';
+        if (contact.isIdle) return 'idle';
+        if (contact.last_online) {
+            const last = new Date(contact.last_online);
+            const diff = (Date.now() - last.getTime()) / 60000;
+            if (diff < 5) return 'idle';
+        }
+        return 'offline';
+    }
+
+    formatLastSeen(contact) {
+        if (contact.isOnline) return 'Online';
+        if (contact.last_online) {
+            const last = new Date(contact.last_online);
+            const diff = Math.floor((Date.now() - last.getTime()) / 60000);
+            if (diff < 60) return `Last seen: ${diff} min ago`;
+            if (diff < 1440) return `Last seen: ${Math.floor(diff/60)}h ago`;
+            return `Last seen: ${last.toLocaleDateString()} ${last.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
+        }
+        return 'Offline';
     }
 }
 
