@@ -307,12 +307,15 @@ class ChatApp {
         this.activeContact = contact;
         this.updateChatHeader();
         await this.loadMessages();
-        this.ws.send(JSON.stringify({
-        type: 'presence',
-        userId: this.user.id,
-        contactId: contact.id,
-        isActive: true
-        }));
+        
+        // Update presence
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+            type: 'presence',
+            contactId: contact.id,
+            isActive: true
+            }));
+        }
     }
 
     formatLastOnline(timestamp) {
@@ -360,16 +363,25 @@ class ChatApp {
         switch (message.type) {
             case "message":
                 this.handleIncomingMessage(message);
-                break;
+            break;
+            case "presence":
+                this.updateContactStatus(message.userId, message.isOnline);
+            break;
             case "typing":
                 this.showTypingIndicator(message);
-                break;
+            break;
             case "reaction":
                 this.addReaction(message);
-                break;
-            case "status":
-                this.updateMessageStatus(message);
-                break;
+            break;
+        }
+    }
+
+    updateContactStatus(userId, isOnline) {
+        const contactItem = document.querySelector(`[data-contact-id="${userId}"]`);
+        if (contactItem) {
+            const statusIndicator = contactItem.querySelector('.status-indicator');
+            statusIndicator.classList.toggle('online', isOnline);
+            statusIndicator.classList.toggle('offline', !isOnline);
         }
     }
 
@@ -389,22 +401,33 @@ class ChatApp {
         const messageDiv = document.createElement("div");
         messageDiv.className = `message ${isSent ? "sent" : "received"}`;
         messageDiv.dataset.id = message.id;
-    
-        // Format time from SQLite timestamp
-        const timeOptions = { hour: '2-digit', minute: '2-digit' };
-        const timestamp = new Date(message.timestamp).toLocaleTimeString([], timeOptions);
-    
+        
+        // Properly handle message timestamps
+        const timestamp = new Date(message.timestamp).toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit'
+        });
+
         messageDiv.innerHTML = `
             ${this.getMessageContent(message)}
             <div class="meta">
-                <span class="time">${timestamp}</span>
-                ${isSent ? '<span class="status">✓✓</span>' : ''}
+            <span class="time">${timestamp}</span>
+            ${isSent ? `<span class="status">${this.getStatusIcon(message.status)}</span>` : ''}
             </div>
             ${this.getReactions(message.reactions)}
         `;
-    
+
         this.elements.messageArea.appendChild(messageDiv);
         this.scrollToBottom();
+    }
+
+    getStatusIcon(status) {
+        switch(status) {
+            case 'sent': return '✓';
+            case 'delivered': return '✓✓';
+            case 'read': return '✓✓';
+            default: return '🕒';
+        }
     }
 
     getMessageContent(message) {
@@ -570,11 +593,6 @@ async handleFileUpload(file) {
     initChat() {
         this.elements.authContainer.style.display = "none";
         this.elements.mainContainer.style.display = "flex";
-        this.activeContact = {
-            id: 1,
-            name: "Contact Name 1",
-            status: "online",
-        };
         this.loadMessages();
     }
 

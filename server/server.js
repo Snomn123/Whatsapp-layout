@@ -99,24 +99,24 @@ app.get('/api/contacts', authenticate, (req, res) => {
     }
 });
 
-// Get conversation between two users
 app.get('/api/messages', authenticate, (req, res) => {
     try {
         const { contactId } = req.query;
         const messages = db.prepare(`
-        SELECT m.*, 
-            (SELECT GROUP_CONCAT(emoji) 
-            FROM reactions r 
-            WHERE r.message_id = m.id) AS reactions
-        FROM messages m
-        WHERE (m.sender_id = ? AND m.receiver_id = ?)
-            OR (m.sender_id = ? AND m.receiver_id = ?)
-        ORDER BY m.timestamp ASC
-        `).all(req.user.id, contactId, contactId, req.user.id);
+            SELECT m.*, u.username as sender_name,
+                (SELECT GROUP_CONCAT(emoji) 
+                FROM reactions r 
+                WHERE r.message_id = m.id) AS reactions
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE (m.sender_id = ? AND m.receiver_id = ?)
+                OR (m.sender_id = ? AND m.receiver_id = ?)
+            ORDER BY m.timestamp ASC
+    `).all(req.user.id, contactId, contactId, req.user.id);
 
         res.json(messages.map(msg => ({
-        ...msg,
-        reactions: msg.reactions ? msg.reactions.split(',') : []
+            ...msg,
+            reactions: msg.reactions ? msg.reactions.split(',') : []
         })));
     } catch (err) {
         res.status(500).json({ error: 'Failed to load messages' });
@@ -141,18 +141,26 @@ const wss = new WebSocket.Server({ server });
 
 // EDITTT
 wss.on('connection', (ws) => {
-    db.prepare(`
-        UPDATE users 
-        SET last_online = datetime('now') 
-        WHERE id = ?
-    `).run(ws.userId);
+    const token = new URL(req.url, `http://${req.headers.host}`).searchParams.get('token');
+
+    try {
+        const user = jwt.verify(token, JWT_SECRET);
+        ws.userId = user.id;
+
+        // Update user presence
+        db.prepare(`UPDATE users SET last_online = datetime('now') WHERE id = ?`).run(user.id);
+
+    } catch (err) {
+        ws.close(1008, 'Invalid token');
+        return;
+    }
 
     ws.on('message', (data) => {
         try {
             const message = JSON.parse(data);
-            
+
             // Handle different message types
-            switch(message.type) {
+            switch (message.type) {
                 case 'message':
                     // Store in database
                     const result = db.prepare(`
@@ -178,7 +186,7 @@ wss.on('connection', (ws) => {
                         ...newMessage,
                         reactions: []
                     };
-                    
+
                     wss.clients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
                             client.send(JSON.stringify(broadcastMessage));
@@ -194,14 +202,14 @@ wss.on('connection', (ws) => {
 
                     // Notify contact about presence
                     wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN && 
-                        client.userId === message.contactId) {
-                        client.send(JSON.stringify({
-                        type: 'presence',
-                        userId: ws.userId,
-                        isOnline: true
-                        }));
-                    }
+                        if (client.readyState === WebSocket.OPEN &&
+                            client.userId === message.contactId) {
+                            client.send(JSON.stringify({
+                                type: 'presence',
+                                userId: ws.userId,
+                                isOnline: true
+                            }));
+                        }
                     });
                     break;
                 // Add cases for other message types (typing, reactions, etc.)
