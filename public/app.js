@@ -558,15 +558,29 @@ class ChatApp {
             if (statusSpan) statusSpan.textContent = this.getStatusIcon(message.status);
             tempMsg.dataset.tempId = null;
             // Optionally update other fields if needed
-        } else {
-            this.addMessage(message, (message.sender_id ?? message.senderId) === this.user.id);
-        }
+        } 
+        // Always update/add the message in the cache and re-render
+        this.addMessage(message, (message.sender_id ?? message.senderId) === this.user.id);
     }
 
     addMessage(message, isSent = false, tempId = null) {
         // Store messages in an array for logic
         if (!this._messageCache) this._messageCache = [];
-        this._messageCache.push({ ...message, isSent });
+        // Check if message with same id or tempId exists, update it instead of pushing
+        let updated = false;
+        let didAddNew = false;
+        for (let i = 0; i < this._messageCache.length; i++) {
+            const m = this._messageCache[i];
+            if ((message.id && m.id === message.id) || (message.tempId && m.tempId === message.tempId)) {
+                this._messageCache[i] = { ...m, ...message, isSent };
+                updated = true;
+                break;
+            }
+        }
+        if (!updated) {
+            this._messageCache.push({ ...message, isSent });
+            didAddNew = true;
+        }
 
         // Clear and re-render all messages for the current chat
         this.elements.messageArea.innerHTML = "";
@@ -621,15 +635,18 @@ class ChatApp {
             this.elements.messageArea.appendChild(messageDiv);
         });
 
-        this.scrollToBottom();
+        // Only scroll if a new message was added
+        if (didAddNew) {
+            setTimeout(() => this.scrollToBottom(), 0);
+        }
     }
 
     getStatusIcon(status) {
         switch(status) {
             case 'sent': return 'sent';
-            case 'delivered': return 'sent';
             case 'read': return 'seen';
-            default: return 'sending';
+            case 'sending': return 'sending...';
+            default: return '';
         }
     }
 
