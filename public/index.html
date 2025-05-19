@@ -36,6 +36,11 @@
 
     <div class="container">
         <aside class="sidebar">
+            <div class="search-container">
+                <input type="text" placeholder="Search contacts">
+            </div>
+            <ul class="chat-list" id="chat-list">
+            </ul>
             <header class="sidebar-header">
                 <div class="user-profile">
                     <label for="avatar-input" style="margin:0;cursor:pointer;">
@@ -50,10 +55,6 @@
                     </button>
                 </div>
             </header>
-            <div class="search-container">
-                <input type="text" placeholder="Search contacts">
-            </div>
-            <ul class="chat-list" id="chat-list">
         </aside>
 
 
@@ -71,16 +72,22 @@
             </header>
             <div class="message-area"></div>
             <footer class="chat-footer">
-                <div class="emoji-gif-container">
-                    <button id="emoji-gif-button">
-                        <img src="emoji-icon.png" alt="Emoji/GIF">
+                <button class="attach-icon input-icon-btn" id="attach-button" type="button">
+                    <span class="plus-icon">+</span>
+                </button>
+                <div class="input-wrapper">
+                    <input type="text" id="message-input" placeholder="Message" autocomplete="off">
+                    <button id="emoji-gif-button" class="input-icon-btn" type="button" title="Emoji">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10" stroke="#888" stroke-width="2" fill="none" />
+                            <circle cx="9" cy="10" r="1" fill="#888" />
+                            <circle cx="15" cy="10" r="1" fill="#888" />
+                            <path d="M9 15c1.333 1 3.667 1 5 0" stroke="#888" stroke-width="2"
+                                stroke-linecap="round" />
+                        </svg>
                     </button>
                 </div>
-                <input type="text" id="message-input" placeholder="Message" autocomplete="off">
                 <input type="file" id="file-input" accept="*" style="display:none;">
-                <a href="#" class="attach-icon">
-                    <img src="attach-icon.png" alt="Attach" id="attach-button">
-                </a>
                 <button class="send-button" id="send-button">
                     <span class="send-arrow"></span>
                 </button>

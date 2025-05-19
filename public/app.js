@@ -161,6 +161,14 @@ class ChatApp {
             if (e.key === "Enter") this.handleSendMessage();
         });
 
+        // Attach button triggers file input
+        const attachButton = document.getElementById('attach-button');
+        if (attachButton) {
+            attachButton.addEventListener('click', () => {
+                this.elements.fileInput.click();
+            });
+        }
+
         this.elements.fileInput.addEventListener("change", (e) => {
             if (e.target.files[0]) this.handleFileUpload(e.target.files[0]);
         });
@@ -179,36 +187,8 @@ class ChatApp {
         });
         this.elements.themeToggle.addEventListener("click", () => this.toggleDarkMode());
 
+        // Avatar upload uses avatar section
         const avatarInput = document.getElementById('avatar-input');
-        const changeAvatarBtn = document.getElementById('change-avatar-btn');
-        if (changeAvatarBtn && avatarInput) {
-            changeAvatarBtn.onclick = () => avatarInput.click();
-            avatarInput.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                if (!file.type.startsWith('image/')) {
-                    this.showNotification('Please select an image file');
-                    return;
-                }
-                const formData = new FormData();
-                formData.append('avatar', file);
-                try {
-                    const res = await fetch('/api/avatar', {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-                        body: formData
-                    });
-                    if (!res.ok) throw new Error('Upload failed');
-                    const data = await res.json();
-                    // Update avatar in UI
-                    document.getElementById('user-avatar').src = data.avatar;
-                    this.user.avatar = data.avatar;
-                    this.showNotification('Avatar updated!', 'success');
-                } catch {
-                    this.showNotification('Failed to update avatar');
-                }
-            };
-        }
         if (avatarInput) {
             avatarInput.onchange = async (e) => {
                 const file = e.target.files[0];
@@ -595,16 +575,22 @@ class ChatApp {
             return div.innerHTML;
         };
 
-        if (message.messageType === 'file') {
+        if (message.type === 'file' || message.messageType === 'file') {
+            // If it's an image file, display as image
+            const url = sanitize(message.content || message.url);
+            const name = sanitize(message.name || 'Download File');
+            const ext = (name.split('.').pop() || '').toLowerCase();
+            if (["jpg","jpeg","png","gif","bmp","webp"].includes(ext)) {
+                return `<img src="${url}" class="message-image" alt="${name}">`;
+            }
             return `<div class="file-message">
                 <i class="fas fa-file"></i>
-                <a href="${sanitize(message.content)}" download>
-                    ${sanitize(message.name || 'Download File')}
+                <a href="${url}" download>
+                    ${name}
                 </a>
             </div>`;
         }
-        
-        if (message.messageType === 'image') {
+        if (message.type === 'image' || message.messageType === 'image') {
             return `<img src="${sanitize(message.content)}" class="message-image" alt="Uploaded image">`;
         }
         
@@ -641,32 +627,37 @@ class ChatApp {
     async handleFileUpload(file) {
         // Client-side validation
         const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
-        
         if (file.size > MAX_SIZE) {
             this.showNotification('File too large (max 10MB)');
             return;
         }
-        
-        if (!ALLOWED_TYPES.includes(file.type)) {
-            this.showNotification('Invalid file type');
-            return;
+        // --- Robust deduplication: check by name and size using a backend endpoint ---
+        try {
+            const res = await fetch(`/api/file-exists?name=${encodeURIComponent(file.name)}&size=${file.size}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.exists && data.url) {
+                    await this.sendMessage(data.url, data.type, { url: data.url, name: file.name, type: data.type });
+                    this.showNotification('File already uploaded, using existing.', 'success');
+                    return;
+                }
+            }
+        } catch (e) {
+            // If check fails, fallback to upload
         }
-
         // Proceed with upload
         const formData = new FormData();
         formData.append("file", file);
-        
         try {
             const res = await fetch("/api/upload", {
                 method: "POST",
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
                 body: formData,
             });
-            
             if (!res.ok) throw new Error('Upload failed');
-            
             const fileInfo = await res.json();
-            this.sendMessage(fileInfo.url, "file", fileInfo);
+            const type = fileInfo.type === 'image' ? 'image' : 'file';
+            await this.sendMessage(fileInfo.url, type, fileInfo);
         } catch (error) {
             this.showNotification("File upload failed");
         }

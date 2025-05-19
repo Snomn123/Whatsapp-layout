@@ -10,7 +10,40 @@ const db = require('./database');
 const fs = require('fs');
 
 const app = express();
-const upload = multer({ dest: '../uploads/' });
+
+// Set uploads directory absolute path
+const uploadsDir = path.join(__dirname, '../uploads');
+const avatarDir = path.join(uploadsDir, 'avatar');
+const filesDir = path.join(uploadsDir, 'files');
+
+// Ensure directories exist
+[uploadsDir, avatarDir, filesDir].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+
+// Multer storage for avatars
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, avatarDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${req.user ? req.user.id : 'anon'}_${Date.now()}${ext}`);
+  }
+});
+const avatarUpload = multer({ storage: avatarStorage });
+
+// Multer storage for files
+const fileStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, filesDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`);
+  }
+});
+const fileUpload = multer({ storage: fileStorage });
+
+// Serve uploads at /uploads
+app.use('/uploads', express.static(uploadsDir));
+
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -24,7 +57,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
-app.use('../uploads', express.static('uploads'));
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Authentication middleware
@@ -152,10 +184,10 @@ app.get('/api/messages', authenticate, (req, res) => {
   }
 });
 
-app.post('/api/upload', upload.single('file'), (req, res) => {
+app.post('/api/upload', fileUpload.single('file'), (req, res) => {
   try {
     res.json({
-      url: `../uploads/${req.file.filename}`,
+      url: `/uploads/files/${req.file.filename}`,
       name: req.file.originalname,
       type: req.file.mimetype.startsWith('image/') ? 'image' : 'file'
     });
@@ -164,7 +196,7 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
 });
 
-app.post('/api/avatar', authenticate, upload.single('avatar'), (req, res) => {
+app.post('/api/avatar', authenticate, avatarUpload.single('avatar'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -173,13 +205,12 @@ app.post('/api/avatar', authenticate, upload.single('avatar'), (req, res) => {
     const oldAvatar = user && user.avatar;
 
     // Save new avatar
-    const avatarUrl = `./uploads/${req.file.filename}`;
+    const avatarUrl = `/uploads/avatar/${req.file.filename}`;
     db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatarUrl, req.user.id);
 
     // Delete old avatar file if it exists and is not the default
-    if (oldAvatar && oldAvatar.startsWith('../uploads/') && oldAvatar !== avatarUrl) {
-      const relativePath = oldAvatar.startsWith('/') ? oldAvatar.slice(1) : oldAvatar;
-      const oldAvatarPath = path.join(__dirname, '..', relativePath);
+    if (oldAvatar && oldAvatar.startsWith('/uploads/avatar/') && oldAvatar !== avatarUrl) {
+      const oldAvatarPath = path.join(__dirname, '..', oldAvatar.replace(/^\//, ''));
       fs.unlink(oldAvatarPath, err => {
         if (err) {
           console.error('Failed to delete old avatar:', oldAvatarPath, err);
@@ -202,6 +233,29 @@ app.get('/api/user', authenticate, (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch user' });
   }
+});
+
+// --- Add file existence check endpoint for deduplication ---
+app.get('/api/file-exists', (req, res) => {
+  const { name, size } = req.query;
+  if (!name || !size) return res.json({ exists: false });
+  const files = fs.readdirSync(filesDir);
+  // Try to find a file with the same original name and size
+  for (const fname of files) {
+    // Our upload format: TIMESTAMP_originalname
+    const originalName = fname.substring(fname.indexOf('_') + 1);
+    const filePath = path.join(filesDir, fname);
+    try {
+      const stat = fs.statSync(filePath);
+      if (originalName === name && stat.size == size) {
+        // Guess type from extension
+        const ext = path.extname(originalName).toLowerCase();
+        const type = ['.jpg','.jpeg','.png','.gif','.bmp','.webp'].includes(ext) ? 'image' : 'file';
+        return res.json({ exists: true, url: `/uploads/files/${fname}`, type });
+      }
+    } catch {}
+  }
+  res.json({ exists: false });
 });
 
 // WebSocket Server
