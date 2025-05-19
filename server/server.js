@@ -132,13 +132,14 @@ app.post('/api/login', (req, res) => {
 
 app.get('/api/contacts', authenticate, (req, res) => {
   try {
+    // Only show contacts the user has added (one-way)
     const contacts = db.prepare(`
-      SELECT id, username, avatar, last_online 
-      FROM users 
-      WHERE id != ?
-      ORDER BY last_online DESC
+      SELECT u.id, u.username, u.avatar, u.last_online
+      FROM contacts c
+      JOIN users u ON u.id = c.contact_id
+      WHERE c.user_id = ?
+      ORDER BY u.last_online DESC
     `).all(req.user.id);
-
     const now = Date.now();
     res.json(contacts.map(c => {
       const onlineInfo = onlineUsers[c.id];
@@ -256,6 +257,33 @@ app.get('/api/file-exists', (req, res) => {
     } catch {}
   }
   res.json({ exists: false });
+});
+
+app.post('/api/add-contact', authenticate, (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Username required' });
+  if (username === req.user.username) return res.status(400).json({ error: 'You cannot add yourself' });
+  // Find user by username
+  const user = db.prepare('SELECT id, username, avatar, last_online FROM users WHERE username = ?').get(username);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  // Check if already in contacts
+  const exists = db.prepare('SELECT 1 FROM contacts WHERE user_id = ? AND contact_id = ?').get(req.user.id, user.id);
+  if (exists) return res.status(400).json({ error: 'Contact already added' });
+  // Add to contacts (one-way)
+  db.prepare('INSERT INTO contacts (user_id, contact_id) VALUES (?, ?)').run(req.user.id, user.id);
+  res.json({ success: true, contact: user });
+});
+
+app.post('/api/remove-contact', authenticate, (req, res) => {
+  const { contactId } = req.body;
+  if (!contactId) return res.status(400).json({ error: 'Contact ID required' });
+  // Only remove from user's own contact list
+  const info = db.prepare('DELETE FROM contacts WHERE user_id = ? AND contact_id = ?').run(req.user.id, contactId);
+  if (info.changes > 0) {
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: 'Contact not found in your list' });
+  }
 });
 
 // WebSocket Server

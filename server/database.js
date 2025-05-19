@@ -23,6 +23,14 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY(receiver_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS contacts (
+    user_id INTEGER NOT NULL,
+    contact_id INTEGER NOT NULL,
+    PRIMARY KEY (user_id, contact_id),
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(contact_id) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id);

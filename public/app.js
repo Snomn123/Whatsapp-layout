@@ -38,6 +38,7 @@ class ChatApp {
             searchInput: document.querySelector(".search-container input"),
             emojiButton: document.getElementById('emoji-gif-button'),
             chatFooter: document.querySelector('.chat-footer'),
+            searchAddButton: null, // will be set below
         };
         // Add emoji panel to DOM if not present
         if (!document.getElementById('emoji-panel')) {
@@ -45,17 +46,34 @@ class ChatApp {
             emojiPanel.id = 'emoji-panel';
             emojiPanel.className = 'emoji-gif-container';
 
-            // Build emoji list dynamically
+            // --- Emoji List Section ---
             const emojiSection = document.createElement('div');
             emojiSection.className = 'emoji-section';
-
             const emojiList = document.createElement('div');
             emojiList.className = 'emoji-list';
 
             EMOJIS.forEach(emoji => {
                 const span = document.createElement('span');
                 span.textContent = emoji;
+                span.tabIndex = 0;
+                span.setAttribute('role', 'button');
+                span.setAttribute('aria-label', emoji);
                 emojiList.appendChild(span);
+            });
+
+            // Keyboard navigation for emoji list
+            emojiList.addEventListener('keydown', e => {
+                const focusable = Array.from(emojiList.querySelectorAll('span'));
+                const idx = focusable.indexOf(document.activeElement);
+                if (e.key === 'ArrowRight' && idx < focusable.length - 1) {
+                    focusable[idx + 1].focus();
+                    e.preventDefault();
+                } else if (e.key === 'ArrowLeft' && idx > 0) {
+                    focusable[idx - 1].focus();
+                    e.preventDefault();
+                } else if (e.key === 'Enter' && idx >= 0) {
+                    focusable[idx].click();
+                }
             });
 
             emojiSection.appendChild(emojiList);
@@ -63,6 +81,41 @@ class ChatApp {
             document.body.appendChild(emojiPanel);
         }
         this.elements.emojiPanel = document.getElementById('emoji-panel');
+
+        // Add separator between search-container and chat-list if not present
+        const sidebar = this.elements.sidebar;
+        if (sidebar && !sidebar.querySelector('.search-separator')) {
+            const searchContainer = sidebar.querySelector('.search-container');
+            const chatList = sidebar.querySelector('.chat-list');
+            if (searchContainer && chatList) {
+                const separator = document.createElement('div');
+                separator.className = 'search-separator';
+                sidebar.insertBefore(separator, chatList);
+            }
+        }
+
+        // Add + button inside the search input wrapper, styled like the emoji icon
+        const searchContainer = this.elements.searchContainer;
+        if (searchContainer && !searchContainer.querySelector('.input-wrapper')) {
+            // Wrap the input in a div.input-wrapper if not already
+            const input = this.elements.searchInput;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'input-wrapper';
+            input.parentNode.insertBefore(wrapper, input);
+            wrapper.appendChild(input);
+        }
+        const inputWrapper = searchContainer.querySelector('.input-wrapper');
+        if (inputWrapper && !inputWrapper.querySelector('.add-contact-btn')) {
+            const addBtn = document.createElement('button');
+            addBtn.className = 'add-contact-btn input-icon-btn';
+            addBtn.type = 'button';
+            addBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="#00a884" stroke-width="2" fill="none"/><line x1="12" y1="8" x2="12" y2="16" stroke="#00a884" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="12" x2="16" y2="12" stroke="#00a884" stroke-width="2" stroke-linecap="round"/></svg>`;
+            addBtn.style.marginLeft = '6px';
+            inputWrapper.appendChild(addBtn);
+            this.elements.searchAddButton = addBtn;
+        } else if (inputWrapper) {
+            this.elements.searchAddButton = inputWrapper.querySelector('.add-contact-btn');
+        }
     }
 
     async checkAuth() {
@@ -284,6 +337,42 @@ class ChatApp {
                 }
             };
         }
+
+        // Add contact (+) button logic
+        if (this.elements.searchAddButton) {
+            this.elements.searchAddButton.addEventListener('click', async () => {
+                const username = this.elements.searchInput.value.trim();
+                if (!username) {
+                    this.showNotification('Enter a username to add', 'error');
+                    return;
+                }
+                if (username === this.user.username) {
+                    this.showNotification('You cannot add yourself', 'error');
+                    return;
+                }
+                try {
+                    const res = await fetch('/api/add-contact', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${localStorage.getItem("token")}`
+                        },
+                        body: JSON.stringify({ username })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        this.showNotification('Contact added!', 'success');
+                        this.elements.searchInput.value = '';
+                        // Optionally, reload contacts
+                        await this.loadContacts();
+                    } else {
+                        this.showNotification(data.error || 'Could not add contact', 'error');
+                    }
+                } catch (e) {
+                    this.showNotification('Failed to add contact', 'error');
+                }
+            });
+        }
     }
 
     toggleDarkMode() {
@@ -324,7 +413,7 @@ class ChatApp {
         if (!themeIcon) return;
         themeIcon.innerHTML = isDark
             // White moon for dark mode
-            ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z" fill="#fff"/></svg>`
+            ? `<svg width="22" height="22" viewBox="0  0 24 24" fill="none"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z" fill="#fff"/></svg>`
             // Black sun for light mode
             : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" fill="#111"/><g stroke="#111" stroke-width="2"><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></g></svg>`;
     }
@@ -402,14 +491,47 @@ class ChatApp {
                     </span>
                 </div>
                 <span class="time">${shortStatus}</span>
+                <button class="remove-contact-btn" title="Remove contact">&times;</button>
             `;
-            li.addEventListener('click', () => this.handleContactSelect(contact, li));
+            li.addEventListener('click', (e) => {
+                if (e.target.classList.contains('remove-contact-btn')) return;
+                this.handleContactSelect(contact, li);
+            });
+            // Remove contact button
+            li.querySelector('.remove-contact-btn').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                this.showConfirm(`Remove ${contact.username} from your contacts?`, async () => {
+                    await this.removeContact(contact.id);
+                });
+            });
             chatList.appendChild(li);
 
             if (this.activeContact && this.activeContact.id === contact.id) {
                 li.classList.add('active');
             }
         });
+    }
+
+    async removeContact(contactId) {
+        try {
+            const res = await fetch('/api/remove-contact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem("token")}`
+                },
+                body: JSON.stringify({ contactId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                this.showNotification('Contact removed', 'success');
+                await this.loadContacts();
+            } else {
+                this.showNotification(data.error || 'Could not remove contact', 'error');
+            }
+        } catch (e) {
+            this.showNotification('Failed to remove contact', 'error');
+        }
     }
 
     async handleContactSelect(contact, liElement) {
@@ -857,6 +979,42 @@ class ChatApp {
         document.body.appendChild(notification);
 
         setTimeout(() => notification.remove(), 3000);
+    }
+
+    // Show a custom confirmation modal
+    showConfirm(message, onConfirm, onCancel) {
+        // Remove any existing modal
+        const existing = document.getElementById('confirm-modal');
+        if (existing) existing.remove();
+        const modal = document.createElement('div');
+        modal.id = 'confirm-modal';
+        modal.innerHTML = `
+            <div class="confirm-box">
+                <div class="confirm-message">${message}</div>
+                <div class="confirm-actions">
+                    <button class="confirm-btn confirm" id="confirm-remove-btn">Remove</button>
+                    <button class="confirm-btn cancel" id="cancel-remove-btn">Cancel</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        document.getElementById('confirm-remove-btn').onclick = () => {
+            modal.remove();
+            if (onConfirm) onConfirm();
+        };
+        document.getElementById('cancel-remove-btn').onclick = () => {
+            modal.remove();
+            if (onCancel) onCancel();
+        };
+        // Allow closing with Escape key
+        const escListener = (e) => {
+            if (e.key === 'Escape') {
+                modal.remove();
+                document.removeEventListener('keydown', escListener);
+                if (onCancel) onCancel();
+            }
+        };
+        document.addEventListener('keydown', escListener);
     }
 
     getStatusClass(contact) {
