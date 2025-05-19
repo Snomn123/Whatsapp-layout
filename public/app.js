@@ -1,3 +1,7 @@
+const EMOJIS = [
+    "😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎","😍","😘","🥰","😗","😙","😚","🙂","🤗","🤩","🤔","🤨","😐","😑","😶","🙄","😏","😣","😥","😮","🤐","😯","😪","😫","🥱","😴","😌","😛","😜","😝","🤤","😒","😓","😔","😕","🙃","🤑","😲","☹️","🙁","😖","😞","😟","😤","😢","😭","😦","😧","😨","😩","🤯","😬","😰","😱","🥵","🥶","😳","🤪","😵","🥴","😠","😡","🤬","😷","🤒","🤕","🤢","🤮","🥳","🥺","🤠","😇","🤡","🤥","🤫","🤭","🧐","🤓","😈","👿","👹","👺","💀","👻","👽","🤖","💩"
+];
+
 class ChatApp {
     constructor() {
         this.ws = null;
@@ -40,13 +44,22 @@ class ChatApp {
             const emojiPanel = document.createElement('div');
             emojiPanel.id = 'emoji-panel';
             emojiPanel.className = 'emoji-gif-container';
-            emojiPanel.innerHTML = `
-                <div class="emoji-section">
-                    <div class="emoji-list">
-                        <span>😀</span><span>😁</span><span>😂</span><span>🤣</span><span>😃</span><span>😄</span><span>😅</span><span>😆</span><span>😉</span><span>😊</span><span>😋</span><span>😎</span><span>😍</span><span>😘</span><span>🥰</span><span>😗</span><span>😙</span><span>😚</span><span>🙂</span><span>🤗</span><span>🤩</span><span>🤔</span><span>🤨</span><span>😐</span><span>😑</span><span>😶</span><span>🙄</span><span>😏</span><span>😣</span><span>😥</span><span>😮</span><span>🤐</span><span>😯</span><span>😪</span><span>😫</span><span>🥱</span><span>😴</span><span>😌</span><span>😛</span><span>😜</span><span>😝</span><span>🤤</span><span>😒</span><span>😓</span><span>😔</span><span>😕</span><span>🙃</span><span>🤑</span><span>😲</span><span>☹️</span><span>🙁</span><span>😖</span><span>😞</span><span>😟</span><span>😤</span><span>😢</span><span>😭</span><span>😦</span><span>😧</span><span>😨</span><span>😩</span><span>🤯</span><span>😬</span><span>😰</span><span>😱</span><span>🥵</span><span>🥶</span><span>😳</span><span>🤪</span><span>😵</span><span>🥴</span><span>😠</span><span>😡</span><span>🤬</span><span>😷</span><span>🤒</span><span>🤕</span><span>🤢</span><span>🤮</span><span>🥳</span><span>🥺</span><span>🤠</span><span>😇</span><span>🤡</span><span>🤥</span><span>🤫</span><span>🤭</span><span>🧐</span><span>🤓</span><span>😈</span><span>👿</span><span>👹</span><span>👺</span><span>💀</span><span>👻</span><span>👽</span><span>🤖</span><span>💩</span>
-                    </div>
-                </div>
-            `;
+
+            // Build emoji list dynamically
+            const emojiSection = document.createElement('div');
+            emojiSection.className = 'emoji-section';
+
+            const emojiList = document.createElement('div');
+            emojiList.className = 'emoji-list';
+
+            EMOJIS.forEach(emoji => {
+                const span = document.createElement('span');
+                span.textContent = emoji;
+                emojiList.appendChild(span);
+            });
+
+            emojiSection.appendChild(emojiList);
+            emojiPanel.appendChild(emojiSection);
             document.body.appendChild(emojiPanel);
         }
         this.elements.emojiPanel = document.getElementById('emoji-panel');
