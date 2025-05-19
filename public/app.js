@@ -31,8 +31,25 @@ class ChatApp {
             searchContainer: document.querySelector(".search-container"),
             chatArea: document.querySelector(".chat-area"),
             chatFooter: document.querySelector(".chat-footer"),
-            searchInput: document.querySelector(".search-container input")
+            searchInput: document.querySelector(".search-container input"),
+            emojiButton: document.getElementById('emoji-gif-button'),
+            chatFooter: document.querySelector('.chat-footer'),
         };
+        // Add emoji panel to DOM if not present
+        if (!document.getElementById('emoji-panel')) {
+            const emojiPanel = document.createElement('div');
+            emojiPanel.id = 'emoji-panel';
+            emojiPanel.className = 'emoji-gif-container';
+            emojiPanel.innerHTML = `
+                <div class="emoji-section">
+                    <div class="emoji-list">
+                        <span>😀</span><span>😁</span><span>😂</span><span>🤣</span><span>😃</span><span>😄</span><span>😅</span><span>😆</span><span>😉</span><span>😊</span><span>😋</span><span>😎</span><span>😍</span><span>😘</span><span>🥰</span><span>😗</span><span>😙</span><span>😚</span><span>🙂</span><span>🤗</span><span>🤩</span><span>🤔</span><span>🤨</span><span>😐</span><span>😑</span><span>😶</span><span>🙄</span><span>😏</span><span>😣</span><span>😥</span><span>😮</span><span>🤐</span><span>😯</span><span>😪</span><span>😫</span><span>🥱</span><span>😴</span><span>😌</span><span>😛</span><span>😜</span><span>😝</span><span>🤤</span><span>😒</span><span>😓</span><span>😔</span><span>😕</span><span>🙃</span><span>🤑</span><span>😲</span><span>☹️</span><span>🙁</span><span>😖</span><span>😞</span><span>😟</span><span>😤</span><span>😢</span><span>😭</span><span>😦</span><span>😧</span><span>😨</span><span>😩</span><span>🤯</span><span>😬</span><span>😰</span><span>😱</span><span>🥵</span><span>🥶</span><span>😳</span><span>🤪</span><span>😵</span><span>🥴</span><span>😠</span><span>😡</span><span>🤬</span><span>😷</span><span>🤒</span><span>🤕</span><span>🤢</span><span>🤮</span><span>🥳</span><span>🥺</span><span>🤠</span><span>😇</span><span>🤡</span><span>🤥</span><span>🤫</span><span>🤭</span><span>🧐</span><span>🤓</span><span>😈</span><span>👿</span><span>👹</span><span>👺</span><span>💀</span><span>👻</span><span>👽</span><span>🤖</span><span>💩</span>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(emojiPanel);
+        }
+        this.elements.emojiPanel = document.getElementById('emoji-panel');
     }
 
     async checkAuth() {
@@ -186,6 +203,45 @@ class ChatApp {
             });
         });
         this.elements.themeToggle.addEventListener("click", () => this.toggleDarkMode());
+
+        // Emoji picker logic
+        if (this.elements.emojiButton) {
+            this.elements.emojiButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const panel = this.elements.emojiPanel;
+                if (panel.classList.contains('show')) {
+                    panel.classList.remove('show');
+                } else {
+                    // Position panel above the emoji button
+                    const rect = this.elements.emojiButton.getBoundingClientRect();
+                    const panelHeight = panel.offsetHeight || 320; // fallback to max-height
+                    let top = rect.top - panelHeight - 8; // 8px gap
+                    if (top < 8) top = 8; // prevent offscreen
+                    panel.style.position = 'absolute';
+                    panel.style.left = rect.left + 'px';
+                    panel.style.top = top + 'px';
+                    panel.classList.add('show');
+                }
+            });
+        }
+        // Insert emoji at cursor
+        if (this.elements.emojiPanel) {
+            this.elements.emojiPanel.addEventListener('click', (e) => {
+                if (e.target.tagName === 'SPAN') {
+                    this.insertAtCursor(this.elements.messageInput, e.target.textContent);
+                    this.elements.emojiPanel.classList.remove('show');
+                    this.elements.messageInput.focus();
+                }
+            });
+        }
+        // Hide emoji panel on click outside
+        document.addEventListener('click', (e) => {
+            if (this.elements.emojiPanel && this.elements.emojiPanel.classList.contains('show')) {
+                if (!this.elements.emojiPanel.contains(e.target) && e.target !== this.elements.emojiButton) {
+                    this.elements.emojiPanel.classList.remove('show');
+                }
+            }
+        });
 
         // Avatar upload uses avatar section
         const avatarInput = document.getElementById('avatar-input');
@@ -368,17 +424,6 @@ class ChatApp {
         }
     }
 
-    formatLastOnline(timestamp) {
-        if (!timestamp) return 'Offline';
-        const now = new Date();
-        const lastOnline = new Date(timestamp);
-        const diffHours = Math.abs(now - lastOnline) / 36e5;
-        
-        if (diffHours < 1) return 'Online';
-        if (diffHours < 24) return `${Math.floor(diffHours)}h ago`;
-        return `${Math.floor(diffHours / 24)}d ago`;
-    }
-
     async sendMessage(content, type = "text", fileInfo = null) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.showNotification("Connection not ready", "error");
@@ -423,9 +468,29 @@ class ChatApp {
             case "new-contact":
                 this.addNewContact(message.contact);
                 break;
-            case "reaction":
-                this.addReaction(message);
+            case "avatar-update":
+                this.handleAvatarUpdate(message);
                 break;
+        }
+    }
+
+    handleAvatarUpdate(message) {
+        // Update avatar in contact list and chat header if relevant
+        const contact = this.getContactById(message.userId);
+        if (contact) {
+            contact.avatar = message.avatar;
+            // Update contact list UI
+            const contactItem = document.querySelector(`[data-contact-id="${message.userId}"]`);
+            if (contactItem) {
+                const img = contactItem.querySelector('img');
+                if (img) img.src = message.avatar;
+            }
+            // Update chat header if this contact is active
+            if (this.activeContact && this.activeContact.id === message.userId) {
+                this.activeContact.avatar = message.avatar;
+                const chatHeaderImg = document.querySelector('.chat-header .user-avatar');
+                if (chatHeaderImg) chatHeaderImg.src = message.avatar;
+            }
         }
     }
 
@@ -551,7 +616,6 @@ class ChatApp {
                     <span class="time" style="margin-right:auto;">${timestamp}</span>
                     ${statusHtml}
                 </div>
-                ${this.getReactions(msg.reactions)}
             `;
 
             this.elements.messageArea.appendChild(messageDiv);
@@ -563,8 +627,9 @@ class ChatApp {
     getStatusIcon(status) {
         switch(status) {
             case 'sent': return 'sent';
+            case 'delivered': return 'sent';
             case 'read': return 'seen';
-            default: return 'sending...';
+            default: return 'sending';
         }
     }
 
@@ -602,16 +667,9 @@ class ChatApp {
             hour: '2-digit',
             minute: '2-digit'
         });
-        
         const status = isSent ? 
-            `<span class="status">${message.status === 'sending' ? '🕒' : '✓✓'}</span>` : '';
-        
+            `<span class="status">${this.getStatusIcon(message.status)}</span>` : '';
         return `${time}${status}`;
-    }
-
-    getReactions(reactions) {
-        if (!reactions || !reactions.length) return '';
-        return `<div class="reactions">${reactions.map(r => `<span class="reaction">${r}</span>`).join('')}</div>`;
     }
 
     updateChatHeader() {
@@ -687,45 +745,6 @@ class ChatApp {
         }
     }
 
-    showReactionPicker(e, messageId) {
-        const picker = document.createElement("div");
-        picker.className = "reaction-picker";
-        picker.style.left = `${e.clientX}px`;
-        picker.style.top = `${e.clientY}px`;
-
-        ["❤️", "😂", "😮", "😢", "👍", "👎"].forEach((emoji) => {
-            const span = document.createElement("span");
-            span.textContent = emoji;
-            span.onclick = () => {
-                this.ws.send(
-                    JSON.stringify({
-                        type: "reaction",
-                        messageId,
-                        emoji,
-                        senderId: this.user.id,
-                    })
-                );
-                picker.remove();
-            };
-            picker.appendChild(span);
-        });
-
-        document.body.appendChild(picker);
-    }
-
-    addReaction(reaction) {
-        const messageDiv = document.querySelector(
-            `[data-message-id="${reaction.messageId}"]`
-        );
-        if (messageDiv) {
-            const reactions =
-                messageDiv.querySelector(".reactions") || document.createElement("div");
-            reactions.className = "reactions";
-            reactions.innerHTML += `<span class="reaction">${reaction.emoji}</span>`;
-            messageDiv.appendChild(reactions);
-        }
-    }
-
     initChat() {
         this.elements.authContainer.style.display = "none";
         this.elements.mainContainer.style.display = "flex";
@@ -763,7 +782,34 @@ class ChatApp {
                 this.addMessage(msg, msg.sender_id === this.user.id);
             });
             
-            this.scrollToBottom();
+            // Wait for images to load before scrolling to bottom
+            const images = this.elements.messageArea.querySelectorAll('img.message-image');
+            if (images.length > 0) {
+                let loaded = 0;
+                images.forEach(img => {
+                    if (img.complete) {
+                        loaded++;
+                    } else {
+                        img.addEventListener('load', () => {
+                            loaded++;
+                            if (loaded === images.length) {
+                                this.scrollToBottom();
+                            }
+                        });
+                        img.addEventListener('error', () => {
+                            loaded++;
+                            if (loaded === images.length) {
+                                this.scrollToBottom();
+                            }
+                        });
+                    }
+                });
+                if (loaded === images.length) {
+                    this.scrollToBottom();
+                }
+            } else {
+                this.scrollToBottom();
+            }
         } catch (error) {
             this.showNotification("Failed to load messages", "error");
             console.error("Message load error:", error);
@@ -807,6 +853,17 @@ class ChatApp {
             return `${Math.floor(diff/1440)}d ago`;
         }
         return 'Offline';
+    }
+
+    // Insert emoji at cursor position in input
+    insertAtCursor(input, text) {
+        // Insert text at cursor position in input
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const value = input.value;
+        input.value = value.slice(0, start) + text + value.slice(end);
+        // Move cursor after inserted emoji
+        input.selectionStart = input.selectionEnd = start + text.length;
     }
 }
 

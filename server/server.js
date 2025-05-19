@@ -166,9 +166,7 @@ app.get('/api/messages', authenticate, (req, res) => {
   try {
     const { contactId } = req.query;
     const messages = db.prepare(`
-      SELECT m.*, 
-        (SELECT GROUP_CONCAT(emoji) FROM reactions WHERE message_id = m.id) AS reactions
-      FROM messages m
+      SELECT * FROM messages m
       WHERE (sender_id = ? AND receiver_id = ?)
         OR (sender_id = ? AND receiver_id = ?)
       ORDER BY timestamp ASC
@@ -176,7 +174,6 @@ app.get('/api/messages', authenticate, (req, res) => {
 
     res.json(messages.map(msg => ({
       ...msg,
-      reactions: msg.reactions ? msg.reactions.split(',') : [],
       timestamp: new Date(msg.timestamp).toISOString()
     })));
   } catch (err) {
@@ -219,6 +216,9 @@ app.post('/api/avatar', authenticate, avatarUpload.single('avatar'), (req, res) 
         }
       });
     }
+
+    // Broadcast avatar change to all clients
+    broadcastAvatarChange(req.user.id, avatarUrl);
 
     res.json({ avatar: avatarUrl });
   } catch (err) {
@@ -316,7 +316,6 @@ function handleMessage(ws, data) {
         broadcast([message.senderId, message.receiverId], {
           ...newMessage,
           type: 'message',
-          reactions: [],
           tempId: message.tempId
         });
         break;
@@ -392,6 +391,15 @@ function broadcastAll(message) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
     }
+  });
+}
+
+// --- Broadcast avatar change to all clients ---
+function broadcastAvatarChange(userId, avatarUrl) {
+  broadcastAll({
+    type: 'avatar-update',
+    userId,
+    avatar: avatarUrl
   });
 }
 
