@@ -308,7 +308,7 @@ body.dark-mode .chat-item:hover {
 /* --- Chat Header --- */
 .chat-header {
     background-color: #f5f5f5;
-    padding: 15px;
+    padding: 22.5px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -940,4 +940,242 @@ body.dark-mode #confirm-modal .confirm-btn.confirm {
 }
 body.dark-mode #confirm-modal .confirm-btn.confirm:hover {
     background: #a02a1a;
+}
+
+/* --- Friends Menu Overlay (Discord-style) --- */
+.friends-menu-overlay {
+    background: #fff;
+    color: #111;
+    border-radius: 0 0 16px 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    box-shadow: none;
+    padding: 0;
+}
+body.dark-mode .friends-menu-overlay {
+    background: #121212;
+    color: #fff;
+}
+.friends-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    height: 66px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #f5f5f5;
+    box-sizing: border-box;
+}
+body.dark-mode .friends-menu-header {
+    border-bottom: 1px solid #444;
+    background: #333;
+}
+.friends-title {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: inherit;
+}
+.friends-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+body.dark-mode .friends-menu-header {
+    border-bottom: 1px solid #222;
+}
+.friends-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.friends-tabs {
+    display: flex;
+    gap: 4px;
+}
+.friends-tab {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #888;
+    padding: 6px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.friends-tab.active, .friends-tab:hover {
+    background: #e5e5e5;
+    color: #111;
+}
+body.dark-mode .friends-tab.active, body.dark-mode .friends-tab:hover {
+    background: #232323;
+    color: #fff;
+}
+.friends-add-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 18px 0 18px;
+    box-sizing: border-box;
+}
+.friends-add-container input {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: 1px solid #e0e0e0;
+    font-size: 1rem;
+    background: #fff;
+    color: #111;
+    outline: none;
+    transition: border 0.2s;
+}
+body.dark-mode .friends-add-container input {
+    background: #232323;
+    color: #fff;
+    border: 1px solid #222;
+}
+
+/* Add separator between add-friend and friends-list containers */
+.friends-add-separator {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(to right, #e0e0e0 60%, #fff 100%);
+    margin: 18px 0 0 0;
+    border: none;
+    opacity: 0.7;
+}
+body.dark-mode .friends-add-separator {
+    background: linear-gradient(to right, #444 60%, #232323 100%);
+}
+
+.friends-list-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 0 0 0;
+    box-sizing: border-box;
+}
+.friends-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.friend-item {
+    display: flex;
+    align-items: center;
+    background: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    border-bottom: 1px solid #e0e0e0;
+    transition: background 0.2s;
+    gap: 14px;
+    position: relative;
+}
+body.dark-mode .friend-item {
+    border-bottom: 1px solid #222;
+}
+.friend-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 10px;
+    background: #e0e0e0;
+}
+body.dark-mode .friend-avatar {
+    background: #232323;
+}
+.friend-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.friend-username {
+    font-size: 1rem;
+    font-weight: 600;
+    color: inherit;
+}
+.friend-status {
+    font-size: 0.92rem;
+    color: #888;
+}
+body.dark-mode .friend-status {
+    color: #bbb;
+}
+
+/* --- Icon Button (used for all round icon buttons, including add-friend) --- */
+.icon-btn, .friends-add-container button {
+    background: #ededed;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    color: #222;
+    font-size: 1.2rem;
+}
+.icon-btn:hover, .icon-btn:focus, .friends-add-container button:hover, .friends-add-container button:focus {
+    background: #e5e5e5;
+}
+body.dark-mode .icon-btn, body.dark-mode .friends-add-container button {
+    background: #232323;
+    color: #fff;
+}
+body.dark-mode .icon-btn:hover, body.dark-mode .icon-btn:focus,
+body.dark-mode .friends-add-container button:hover, body.dark-mode .friends-add-container button:focus {
+    background: #292929;
+}
+.friends-add-container button {
+    width: 36px;
+    height: 36px;
+    margin-left: 0;
+}
+
+/* --- Friends Action Buttons (remove, accept, cancel) --- */
+.action-btn, .friend-remove-btn, .friend-accept-btn, .friend-cancel-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 5px;
+    transition: background 0.15s, color 0.15s;
+    margin-left: 6px;
+}
+.friend-accept-btn {
+    color: #25d366;
+}
+.friend-remove-btn:hover, .friend-cancel-btn:hover {
+    background: #e0bcbc;
+    color: #d00;
+}
+.friend-accept-btn:hover {
+    background: #e0fbe0;
+}
+body.dark-mode .friend-remove-btn:hover, body.dark-mode .friend-cancel-btn:hover {
+    background: #3a2323;
+    color: #ff6a6a;
+}
+body.dark-mode .friend-accept-btn:hover {
+    background: #163c36;
+}
+
+/* Responsive for friends menu */
+@media (max-width: 900px) {
+    .friends-menu-header, .friends-list-container, .friends-add-container {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
 }

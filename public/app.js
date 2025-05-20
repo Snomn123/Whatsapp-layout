@@ -8,7 +8,9 @@ class ChatApp {
         this.user = null;
         this.activeContact = null;
         this.typingState = null;
-        this.timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        this.timeZone = 'Europe/Berlin';
+        this.friendsTab = 'all';
+        this.friendsMenuVisible = false;
 
         this.initDOMElements();
         this.initAuthListeners();
@@ -39,6 +41,11 @@ class ChatApp {
             emojiButton: document.getElementById('emoji-gif-button'),
             chatFooter: document.querySelector('.chat-footer'),
             searchAddButton: null, // will be set below
+            friendsMenuOverlay: document.getElementById('friends-menu-overlay'),
+            friendsList: document.getElementById('friends-list'),
+            friendsTabs: document.querySelectorAll('.friends-tab'),
+            addFriendInput: document.getElementById('add-friend-input'),
+            addFriendBtn: document.getElementById('add-friend-btn'),
         };
         // Add emoji panel to DOM if not present
         if (!document.getElementById('emoji-panel')) {
@@ -104,18 +111,6 @@ class ChatApp {
             input.parentNode.insertBefore(wrapper, input);
             wrapper.appendChild(input);
         }
-        const inputWrapper = searchContainer.querySelector('.input-wrapper');
-        if (inputWrapper && !inputWrapper.querySelector('.add-contact-btn')) {
-            const addBtn = document.createElement('button');
-            addBtn.className = 'add-contact-btn input-icon-btn';
-            addBtn.type = 'button';
-            addBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="#00a884" stroke-width="2" fill="none"/><line x1="12" y1="8" x2="12" y2="16" stroke="#00a884" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="12" x2="16" y2="12" stroke="#00a884" stroke-width="2" stroke-linecap="round"/></svg>`;
-            addBtn.style.marginLeft = '6px';
-            inputWrapper.appendChild(addBtn);
-            this.elements.searchAddButton = addBtn;
-        } else if (inputWrapper) {
-            this.elements.searchAddButton = inputWrapper.querySelector('.add-contact-btn');
-        }
     }
 
     async checkAuth() {
@@ -124,6 +119,8 @@ class ChatApp {
             try {
                 this.user = await this.fetchUser();
                 this.connectWebSocket(); // Connect first
+                await this.loadContacts();
+                this.showFriendsMenuIfNoContact();
             } catch {
                 this.showAuth();
                 localStorage.removeItem('token');
@@ -270,6 +267,14 @@ class ChatApp {
         });
         this.elements.themeToggle.addEventListener("click", () => this.toggleDarkMode());
 
+        const friendsTabBtn = document.getElementById('friends-tab-btn');
+        if (friendsTabBtn) {
+            friendsTabBtn.addEventListener('click', () => {
+                this.activeContact = null;
+                this.showFriendsMenu();
+            });
+        }
+
         // Emoji picker logic
         if (this.elements.emojiButton) {
             this.elements.emojiButton.addEventListener('click', (e) => {
@@ -373,6 +378,32 @@ class ChatApp {
                 }
             });
         }
+
+        // Friends menu tab switching
+        if (this.elements.friendsTabs) {
+            this.elements.friendsTabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    this.elements.friendsTabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    this.friendsTab = tab.dataset.tab;
+                    this.renderFriendsMenu();
+                });
+            });
+        }
+
+        // Add friend by username
+        if (this.elements.addFriendBtn && this.elements.addFriendInput) {
+            this.elements.addFriendBtn.onclick = () => {
+                const username = this.elements.addFriendInput.value.trim();
+                if (username) this.addContact(username);
+            };
+            this.elements.addFriendInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const username = this.elements.addFriendInput.value.trim();
+                    if (username) this.addContact(username);
+                }
+            });
+        }
     }
 
     toggleDarkMode() {
@@ -445,18 +476,19 @@ class ChatApp {
     }
 
     async loadContacts() {
-        try {
-            const response = await fetch('/api/contacts', {
-                headers: { 
-                    Authorization: `Bearer ${localStorage.getItem("token")}`,
-                    'X-Timezone': this.timeZone
-                }
-            });
-            const contacts = await response.json();
-            this.renderContacts(contacts);
-        } catch (error) {
-            this.showNotification("Failed to load contacts", "error");
-        }
+        // Fetch friends and pending requests
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/contacts", {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return this.showNotification("Failed to load contacts");
+        const data = await res.json();
+        this.friends = data.friends || [];
+        this.pendingSent = data.pendingSent || [];
+        this.pendingReceived = data.pendingReceived || [];
+        this.contacts = this.friends; // for legacy code
+        this.showFriendsMenuIfNoContact();
+        this.renderContacts(this.friends);
     }
 
     renderContacts(contacts) {
@@ -532,10 +564,13 @@ class ChatApp {
         } catch (e) {
             this.showNotification('Failed to remove contact', 'error');
         }
+        // After removing, if no contacts left or no activeContact, show friends menu
+        setTimeout(() => this.showFriendsMenuIfNoContact(), 100);
     }
 
     async handleContactSelect(contact, liElement) {
         this.activeContact = contact;
+        this.hideFriendsMenu();
         // Remove 'active' from all, add to selected
         document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
         if (liElement) liElement.classList.add('active');
@@ -739,10 +774,7 @@ class ChatApp {
             }
 
             // Properly handle message timestamps
-            const timestamp = new Date(msg.timestamp).toLocaleTimeString([], { 
-                hour: '2-digit', 
-                minute: '2-digit'
-            });
+            const timestamp = this.formatTimeToBerlin(msg.timestamp);
 
             // Status logic
             let statusHtml = "";
@@ -815,10 +847,7 @@ class ChatApp {
     }
 
     getMessageMeta(message, isSent) {
-        const time = new Date(message.timestamp).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        const time = this.formatTimeToBerlin(message.timestamp);
         const status = isSent ? 
             `<span class="status">${this.getStatusIcon(message.status)}</span>` : '';
         return `${time}${status}`;
@@ -1030,17 +1059,10 @@ class ChatApp {
     }
 
     formatLastSeen(contact) {
-        if (contact.isOnline) return 'Online';
-        if (contact.isIdle) return 'Idle';
-        if (contact.last_online) {
-            const last = new Date(contact.last_online);
-            const now = new Date();
-            const diff = Math.floor((now - last) / 60000);
-            if (diff < 60) return `${diff}m ago`;
-            if (diff < 1440) return `${Math.floor(diff/60)}h ago`;
-            return `${Math.floor(diff/1440)}d ago`;
-        }
-        return 'Offline';
+        if (!contact || !contact.lastOnline) return '';
+        // Format last seen in Europe/Berlin
+        const lastSeen = this.formatDateTimeToBerlin(contact.lastOnline);
+        return `Last seen ${lastSeen}`;
     }
 
     // Insert emoji at cursor position in input
@@ -1052,6 +1074,177 @@ class ChatApp {
         input.value = value.slice(0, start) + text + value.slice(end);
         // Move cursor after inserted emoji
         input.selectionStart = input.selectionEnd = start + text.length;
+    }
+
+    showFriendsMenuIfNoContact() {
+        if (!this.activeContact) {
+            this.showFriendsMenu();
+        } else {
+            this.hideFriendsMenu();
+        }
+    }
+
+    showFriendsMenu() {
+        this.friendsMenuVisible = true;
+        if (this.elements.friendsMenuOverlay) this.elements.friendsMenuOverlay.style.display = 'flex';
+        if (this.elements.chatHeader) this.elements.chatHeader.style.display = 'none';
+        if (this.elements.chatFooter) this.elements.chatFooter.style.display = 'none';
+        if (this.elements.messageArea) this.elements.messageArea.style.display = 'none';
+        this.renderFriendsMenu();
+    }
+
+    hideFriendsMenu() {
+        this.friendsMenuVisible = false;
+        if (this.elements.friendsMenuOverlay) this.elements.friendsMenuOverlay.style.display = 'none';
+        if (this.elements.chatHeader) this.elements.chatHeader.style.display = '';
+        if (this.elements.chatFooter) this.elements.chatFooter.style.display = '';
+        if (this.elements.messageArea) this.elements.messageArea.style.display = '';
+    }
+
+    renderFriendsMenu() {
+        if (!this.elements.friendsList) return;
+        let list = [];
+        if (this.friendsTab === 'all') {
+            list = this.friends;
+        } else if (this.friendsTab === 'online') {
+            list = this.friends.filter(f => f.isOnline);
+        } else if (this.friendsTab === 'pending') {
+            list = [
+                ...this.pendingSent.map(u => ({ ...u, _pendingType: 'sent' })),
+                ...this.pendingReceived.map(u => ({ ...u, _pendingType: 'received' }))
+            ];
+        }
+        this.elements.friendsList.innerHTML = '';
+        if (list.length === 0) {
+            const empty = document.createElement('li');
+            empty.className = 'chat-item';
+            empty.style.justifyContent = 'center';
+            empty.textContent = this.friendsTab === 'pending' ? 'No pending requests.' : 'No friends found.';
+            this.elements.friendsList.appendChild(empty);
+            return;
+        }
+        list.forEach(contact => {
+            const li = document.createElement('li');
+            li.className = 'chat-item';
+            li.dataset.contactId = contact.id;
+
+            // Status
+            const statusClass = this.getStatusClass(contact);
+            let shortStatus = "Offline";
+            if (contact.isOnline) shortStatus = "Online";
+            else if (contact.isIdle) shortStatus = "Idle";
+            else if (contact.last_online) {
+                const last = new Date(contact.last_online);
+                const now = new Date();
+                const diff = Math.floor((now - last) / 60000);
+                if (diff < 60) shortStatus = `${diff}m ago`;
+                else if (diff < 1440) shortStatus = `${Math.floor(diff/60)}h ago`;
+                else shortStatus = `${Math.floor(diff/1440)}d ago`;
+            }
+
+            li.innerHTML = `
+                <img src="${contact.avatar || 'assets/user-avatar.png'}" alt="${contact.username}">
+                <div class="chat-info">
+                    <span class="contact-name">
+                        <span class="online-status ${statusClass}"></span>
+                        ${contact.username}
+                    </span>
+                </div>
+                <span class="time">${shortStatus}</span>
+            `;
+
+            // Actions
+            if (this.friendsTab === 'pending') {
+                if (contact._pendingType === 'sent') {
+                    const cancelBtn = document.createElement('button');
+                    cancelBtn.className = 'remove-contact-btn';
+                    cancelBtn.title = 'Cancel request';
+                    cancelBtn.textContent = '×';
+                    cancelBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.showConfirm(`Cancel friend request to ${contact.username}?`, () => this.removeContact(contact.id));
+                    };
+                    li.appendChild(cancelBtn);
+                } else {
+                    const acceptBtn = document.createElement('button');
+                    acceptBtn.className = 'remove-contact-btn';
+                    acceptBtn.title = 'Accept request';
+                    acceptBtn.textContent = '✓';
+                    acceptBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.addContact(contact.username, true);
+                    };
+                    li.appendChild(acceptBtn);
+                    const declineBtn = document.createElement('button');
+                    declineBtn.className = 'remove-contact-btn';
+                    declineBtn.title = 'Decline request';
+                    declineBtn.textContent = '×';
+                    declineBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.showConfirm(`Decline friend request from ${contact.username}?`, () => this.removeContact(contact.id));
+                    };
+                    li.appendChild(declineBtn);
+                }
+            } else {
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-contact-btn';
+                removeBtn.title = 'Remove friend';
+                removeBtn.textContent = '×';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.showConfirm(`Remove ${contact.username} from your friends?`, () => this.removeContact(contact.id));
+                };
+                li.appendChild(removeBtn);
+                li.onclick = (e) => {
+                    if (e.target === removeBtn) return;
+                    // Deselect all chat-items in chat-list (sidebar)
+                    document.querySelectorAll('.chat-list .chat-item').forEach(item => item.classList.remove('active'));
+                    // Find the corresponding chat-item in the sidebar and set it active
+                    const sidebarItem = document.querySelector(`.chat-list .chat-item[data-contact-id="${contact.id}"]`);
+                    if (sidebarItem) sidebarItem.classList.add('active');
+                    // Set this contact as active and open chat
+                    this.handleContactSelect(contact, sidebarItem);
+                    this.hideFriendsMenu();
+                };
+            }
+            this.elements.friendsList.appendChild(li);
+        });
+    }
+
+    async addContact(username, isAccept = false) {
+        if (!username) return;
+        const token = localStorage.getItem("token");
+        try {
+            const res = await fetch("/api/add-contact", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ username })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to add contact');
+            this.showNotification(isAccept ? "Friend request accepted!" : "Friend request sent!", "success");
+            this.elements["addFriendInput"] && (this.elements["addFriendInput"].value = "");
+            await this.loadContacts();
+        } catch (err) {
+            this.showNotification(err.message || "Failed to add contact");
+        }
+    }
+
+    // Format a JS Date or ISO string to Europe/Berlin time, short or long
+    formatTimeToBerlin(date, opts = { hour: '2-digit', minute: '2-digit' }) {
+        if (!date) return '';
+        const d = typeof date === 'string' ? new Date(date) : date;
+        return d.toLocaleTimeString('en-GB', { ...opts, timeZone: this.timeZone });
+    }
+
+    // Format a JS Date or ISO string to Europe/Berlin date+time
+    formatDateTimeToBerlin(date, opts = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) {
+        if (!date) return '';
+        const d = typeof date === 'string' ? new Date(date) : date;
+        return d.toLocaleString('en-GB', { ...opts, timeZone: this.timeZone });
     }
 }
 

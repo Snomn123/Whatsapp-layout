@@ -132,32 +132,50 @@ app.post('/api/login', (req, res) => {
 
 app.get('/api/contacts', authenticate, (req, res) => {
   try {
-    // Only show contacts the user has added (one-way)
-    const contacts = db.prepare(`
+    // Friends: mutual (both have added each other)
+    const friends = db.prepare(`
       SELECT u.id, u.username, u.avatar, u.last_online
-      FROM contacts c
-      JOIN users u ON u.id = c.contact_id
-      WHERE c.user_id = ?
+      FROM contacts c1
+      JOIN contacts c2 ON c1.contact_id = c2.user_id AND c2.contact_id = c1.user_id
+      JOIN users u ON u.id = c1.contact_id
+      WHERE c1.user_id = ?
+      GROUP BY u.id
       ORDER BY u.last_online DESC
     `).all(req.user.id);
+
+    // Pending sent: user has added, but not added back
+    const pendingSent = db.prepare(`
+      SELECT u.id, u.username, u.avatar, u.last_online
+      FROM contacts c1
+      LEFT JOIN contacts c2 ON c1.contact_id = c2.user_id AND c2.contact_id = c1.user_id
+      JOIN users u ON u.id = c1.contact_id
+      WHERE c1.user_id = ? AND (c2.user_id IS NULL)
+      ORDER BY u.last_online DESC
+    `).all(req.user.id);
+
+    // Pending received: others have added user, but user hasn't added back
+    const pendingReceived = db.prepare(`
+      SELECT u.id, u.username, u.avatar, u.last_online
+      FROM contacts c1
+      LEFT JOIN contacts c2 ON c1.user_id = c2.contact_id AND c1.contact_id = c2.user_id
+      JOIN users u ON u.id = c1.user_id
+      WHERE c1.contact_id = ? AND (c2.user_id IS NULL)
+      ORDER BY u.last_online DESC
+    `).all(req.user.id);
+
     const now = Date.now();
-    res.json(contacts.map(c => {
-      const onlineInfo = onlineUsers[c.id];
-      let isOnline = false, isIdle = false;
-      if (onlineInfo) {
-        const diff = now - onlineInfo.lastActive;
-        if (diff <= 5 * 60 * 1000) {
-          isOnline = true;
-        } else {
-          isIdle = true;
-        }
-      }
-      return {
-        ...c,
-        isOnline,
-        isIdle
-      };
+    // Add online status
+    const addStatus = arr => arr.map(c => ({
+      ...c,
+      isOnline: !!onlineUsers[c.id],
+      isIdle: onlineUsers[c.id]?.isIdle || false,
     }));
+
+    res.json({
+      friends: addStatus(friends),
+      pendingSent: addStatus(pendingSent),
+      pendingReceived: addStatus(pendingReceived)
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load contacts' });
   }

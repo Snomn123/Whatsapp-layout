@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WhatsApp-like Web UI</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
@@ -16,20 +15,17 @@
                 <button class="auth-tab active" data-form="login">Login</button>
                 <button class="auth-tab" data-form="register">Register</button>
             </div>
-
             <form id="login-form" class="auth-content active">
                 <input type="text" placeholder="Username" id="login-username" required>
                 <input type="password" placeholder="Password" id="login-password" required>
                 <button type="submit">Login</button>
             </form>
-
             <form id="register-form" class="auth-content">
                 <input type="text" placeholder="Username" id="register-username" required>
                 <input type="password" placeholder="Password" id="register-password" required>
                 <input type="password" placeholder="Confirm Password" id="confirm-password" required>
                 <button type="submit">Register</button>
             </form>
-
             <p class="auth-error"></p>
         </div>
     </div>
@@ -39,8 +35,7 @@
             <div class="search-container">
                 <input type="text" placeholder="Search contacts">
             </div>
-            <ul class="chat-list" id="chat-list">
-            </ul>
+            <ul class="chat-list" id="chat-list"></ul>
             <header class="sidebar-header">
                 <div class="user-profile">
                     <label for="avatar-input" style="margin:0;cursor:pointer;">
@@ -50,13 +45,20 @@
                     <span id="user-name">Loading...</span>
                 </div>
                 <div class="sidebar-icons">
+                    <button id="friends-tab-btn" class="icon-btn" title="Friends">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                            <circle cx="7" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="17" cy="13" r="3" stroke="currentColor" stroke-width="2"/>
+                            <path d="M2 20c0-2.5 3-4.5 5-4.5s5 2 5 4.5" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 20c0-1.5 2-3 5-3s5 1.5 5 3" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </button>
                     <button id="theme-toggle">
                         <span id="theme-icon"></span>
                     </button>
                 </div>
             </header>
         </aside>
-
 
         <main class="chat-area">
             <header class="chat-header">
@@ -92,9 +94,27 @@
                     <span class="send-arrow"></span>
                 </button>
             </footer>
+            <!-- Friends menu overlay (styled like chat list) -->
+            <div id="friends-menu-overlay" class="friends-menu-overlay" style="display:none;">
+                <div class="friends-menu-header">
+                    <span class="friends-title">Friends</span>
+                    <div class="friends-tabs">
+                        <button class="friends-tab active" data-tab="all">All</button>
+                        <button class="friends-tab" data-tab="online">Online</button>
+                        <button class="friends-tab" data-tab="pending">Pending</button>
+                    </div>
+                </div>
+                <div class="friends-add-container">
+                    <input type="text" id="add-friend-input" placeholder="Add friend by username">
+                    <button id="add-friend-btn" title="Add friend" class="icon-btn" style="margin-left:0;">+</button>
+                </div>
+                <hr class="friends-add-separator">
+                <div class="friends-list-container">
+                    <ul class="friends-list" id="friends-list"></ul>
+                </div>
+            </div>
         </main>
     </div>
     <script src="app.js"></script>
 </body>
-
 </html>
